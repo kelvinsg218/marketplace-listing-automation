@@ -1,0 +1,21 @@
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.5 system-ui, "Segoe UI", sans-serif; background: #f3f1ea; color: #1f2420; }
+header { background: #2f5d50; color: #fff; padding: 14px 28px; display: flex; align-items: center; gap: 14px; }
+header strong { font-size: 18px; letter-spacing: .2px; }
+header span { opacity: .8; font-size: 13px; }
+main { max-width: 760px; margin: 28px auto; background: #fff; border: 1px solid #ddd8cb; border-radius: 8px; padding: 28px; }
+h1 { font-size: 22px; margin: 0 0 18px; }
+label { display: block; font-weight: 600; margin: 16px 0 6px; }
+input, select, textarea { width: 100%; padding: 9px 10px; border: 1px solid #bdb6a6; border-radius: 6px; font: inherit; background: #fff; }
+textarea { min-height: 120px; }
+.row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.hint { color: #6b6a62; font-size: 13px; }
+button { margin-top: 22px; padding: 11px 20px; border: none; border-radius: 6px; background: #2f5d50; color: #fff; font: 600 15px system-ui; cursor: pointer; }
+button:disabled { background: #9db3ab; cursor: progress; }
+#errors { color: #a2271c; }
+#image-list { display: flex; gap: 8px; flex-wrap: wrap; padding: 0; list-style: none; }
+#image-list li { width: 72px; height: 72px; border: 1px solid #ddd8cb; border-radius: 6px; overflow: hidden; }
+#image-list img { width: 100%; height: 100%; object-fit: cover; }
+#captcha { position: fixed; inset: 0; background: rgba(20, 24, 22, .7); display: none; align-items: center; justify-content: center; }
+#captcha div { background: #fff; padding: 28px; border-radius: 8px; max-width: 360px; text-align: center; }
+.badge { display: inline-block; padding: 2px 10px; border-radius: 99px; background: #e2efe9; color: #2f5d50; font-weight: 600; }

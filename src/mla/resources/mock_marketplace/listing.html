@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Anúncio publicado — Feira Local (simulada)</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><strong>Feira Local</strong><span>marketplace simulado para testes do MLA</span></header>
+<main>
+  <p><span class="badge" id="published-badge">Anúncio publicado</span></p>
+  <h1 id="listing-title"></h1>
+  <p>Código do anúncio: <strong id="listing-id"></strong></p>
+  <p id="listing-meta" class="hint"></p>
+</main>
+<script>
+const id = new URLSearchParams(location.search).get('id');
+const data = JSON.parse(localStorage.getItem('sim_listings') || '{}')[id];
+if (data) {
+  document.getElementById('listing-id').textContent = id;
+  document.getElementById('listing-title').textContent = data.title;
+  document.getElementById('listing-meta').textContent = `R$ ${data.price} · ${data.stock} em estoque · ${data.photos} foto(s)`;
+} else {
+  document.getElementById('published-badge').textContent = 'Anúncio não encontrado';
+}
+</script>
+</body>
+</html>

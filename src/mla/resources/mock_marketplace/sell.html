@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Novo anúncio — Feira Local (simulada)</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><strong>Feira Local</strong><span id="seller"></span></header>
+<main>
+  <h1>Novo anúncio</h1>
+  <div id="form-root" hidden>
+  <form id="sell-form" novalidate>
+    <label for="category">Categoria</label>
+    <select id="category" name="category">
+      <option value="">Escolha…</option>
+      <option value="informatica">Informática</option>
+      <option value="casa">Casa e decoração</option>
+      <option value="acessorios">Acessórios</option>
+      <option value="outros">Outros</option>
+    </select>
+    <div id="attributes" aria-live="polite"></div>
+
+    <label for="title">Título</label>
+    <input id="title" name="title" maxlength="60">
+    <div class="hint"><span id="title-count">0</span>/60</div>
+
+    <label for="images">Fotos</label>
+    <input id="images" name="images" type="file" accept="image/*" multiple>
+    <ul id="image-list"></ul>
+
+    <label for="description">Descrição</label>
+    <textarea id="description" name="description"></textarea>
+
+    <div class="row">
+      <div><label for="price">Preço (R$)</label><input id="price" name="price" inputmode="decimal"></div>
+      <div><label for="stock">Estoque</label><input id="stock" name="stock" type="number" min="0"></div>
+      <div><label for="condition">Condição</label>
+        <select id="condition" name="condition"><option value="new">Novo</option><option value="used">Usado</option><option value="refurbished">Recondicionado</option></select></div>
+      <div><label for="listing_type">Tipo</label>
+        <select id="listing_type" name="listing_type"><option value="">Padrão</option><option>Clássico</option><option>Premium</option></select></div>
+    </div>
+    <div class="row">
+      <div><label for="weight">Peso (g)</label><input id="weight" name="weight" type="number" min="0"></div>
+      <div><label for="length">Comprimento (cm)</label><input id="length" name="length" inputmode="decimal"></div>
+      <div><label for="width">Largura (cm)</label><input id="width" name="width" inputmode="decimal"></div>
+      <div><label for="height">Altura (cm)</label><input id="height" name="height" inputmode="decimal"></div>
+    </div>
+    <ul id="errors" role="alert"></ul>
+    <button id="publish" type="submit">Publicar anúncio</button>
+  </form>
+  </div>
+</main>
+<div id="captcha" role="dialog" aria-label="Verificação"><div>
+  <p><strong>Confirme que você é humano</strong></p>
+  <p class="hint">Verificação simulada: precisa ser resolvida por uma pessoa.</p>
+  <button id="captcha-ok" type="button">Sou humano</button>
+</div></div>
+<script>
+const params = new URLSearchParams(location.search);
+if (!localStorage.getItem('sim_session')) {
+  location.replace('login.html?next=' + encodeURIComponent('sell.html' + location.search));
+}
+document.getElementById('seller').textContent = 'Vendedor: ' + (localStorage.getItem('sim_session') || '');
+const ATTRS = {
+  informatica: [{id: 'attr-modelo', label: 'Modelo', required: true}, {id: 'attr-cor', label: 'Cor', required: false}],
+  casa: [{id: 'attr-material', label: 'Material', required: true}],
+  acessorios: [{id: 'attr-cor', label: 'Cor', required: false}],
+  outros: [],
+};
+const delay = params.get('slow') ? 2500 : 300;
+setTimeout(() => { document.getElementById('form-root').hidden = false; }, params.get('slow') ? 2000 : 0);
+if (params.get('captcha') && !sessionStorage.getItem('captcha_ok')) {
+  const box = document.getElementById('captcha');
+  box.style.display = 'flex';
+  document.getElementById('captcha-ok').onclick = () => {
+    sessionStorage.setItem('captcha_ok', '1');
+    box.style.display = 'none';
+  };
+}
+document.getElementById('category').addEventListener('change', (e) => {
+  const holder = document.getElementById('attributes');
+  holder.innerHTML = '<p class="hint" id="attr-loading">Carregando atributos…</p>';
+  setTimeout(() => {
+    holder.innerHTML = '';
+    for (const a of ATTRS[e.target.value] || []) {
+      holder.insertAdjacentHTML('beforeend',
+        `<label for="${a.id}">${a.label}${a.required ? ' *' : ''}</label><input id="${a.id}" data-required="${a.required}" data-label="${a.label}">`);
+    }
+    holder.dataset.ready = '1';
+  }, delay);
+});
+document.getElementById('title').addEventListener('input', (e) => {
+  document.getElementById('title-count').textContent = e.target.value.length;
+});
+document.getElementById('images').addEventListener('change', (e) => {
+  const list = document.getElementById('image-list');
+  for (const file of e.target.files) {
+    const li = document.createElement('li');
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(file);
+    img.alt = file.name;
+    li.appendChild(img);
+    list.appendChild(li);
+  }
+});
+const num = (v) => parseFloat(String(v).replace(/\./g, '').replace(',', '.'));
+document.getElementById('sell-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const errors = [];
+  const v = (id) => document.getElementById(id).value.trim();
+  if (!v('category')) errors.push('Escolha a categoria');
+  document.querySelectorAll('#attributes input[data-required="true"]').forEach((i) => {
+    if (!i.value.trim()) errors.push('Preencha o atributo ' + i.dataset.label);
+  });
+  if (!v('title')) errors.push('Informe o título');
+  if (!document.querySelectorAll('#image-list li').length) errors.push('Envie pelo menos uma foto');
+  if (!(num(v('price')) > 0)) errors.push('Preço inválido');
+  if (!(parseInt(v('stock')) > 0)) errors.push('Estoque inválido');
+  for (const id of ['weight', 'length', 'width', 'height']) if (!(num(v(id)) > 0)) errors.push('Informe ' + id);
+  const box = document.getElementById('errors');
+  box.innerHTML = errors.map((x) => `<li>${x}</li>`).join('');
+  if (errors.length) return;
+  const btn = document.getElementById('publish');
+  btn.disabled = true;
+  btn.textContent = 'Publicando…';
+  setTimeout(() => {
+    const id = 'SIM-' + Date.now().toString(36).toUpperCase();
+    const listings = JSON.parse(localStorage.getItem('sim_listings') || '{}');
+    listings[id] = {title: v('title'), price: v('price'), stock: v('stock'), photos: document.querySelectorAll('#image-list li').length};
+    localStorage.setItem('sim_listings', JSON.stringify(listings));
+    location.href = 'listing.html?id=' + id;
+  }, params.get('slowpublish') ? 4000 : 600);
+});
+</script>
+</body>
+</html>

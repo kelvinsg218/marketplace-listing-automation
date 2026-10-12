@@ -1,0 +1,39 @@
+# Python / tooling
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+tools/.metrics/
+
+# builds
+build/
+dist/
+*.spec.bak
+
+# Claude Code local-only settings
+.claude/settings.local.json
+
+# user data never goes to the repository (it lives in %LOCALAPPDATA%\MLA)
+data/
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+browser-profiles/
+artifacts/
+backups/
+exports/
+logs/
+*.log
+snapshots/
+
+# secrets
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+credentials*.json

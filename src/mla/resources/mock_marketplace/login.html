@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Entrar — Feira Local (simulada)</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><strong>Feira Local</strong><span>marketplace simulado para testes do MLA</span></header>
+<main>
+  <h1>Entrar na sua conta de vendedor</h1>
+  <p class="hint">Ambiente de teste: qualquer e-mail e senha funcionam. Nada é publicado de verdade.</p>
+  <form id="login-form">
+    <label for="email">E-mail</label>
+    <input id="email" name="email" type="email" autocomplete="off" required>
+    <label for="password">Senha</label>
+    <input id="password" name="password" type="password" required>
+    <button id="login-submit" type="submit">Entrar</button>
+  </form>
+</main>
+<script>
+document.getElementById('login-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  localStorage.setItem('sim_session', document.getElementById('email').value || 'vendedor');
+  const next = new URLSearchParams(location.search).get('next') || 'sell.html';
+  location.href = next;
+});
+</script>
+</body>
+</html>
