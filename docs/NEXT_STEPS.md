@@ -4,7 +4,7 @@
 1. Owner tests the open app: Importações (CSV/XLSX/ZIP of the company base), Catálogo (filters, editor tabs
    Técnico/Compatibilidade), Compatibilidades, Anúncios (prepare, edit, approve), Marketplaces (add account + URL).
 2. Collect feedback; triage bugs / visual / UX; fix with tests and `tools/ui_snapshots.py`.
-3. Ask before committing phase 9 (suggested: one commit per area; no Co-Authored-By trailer).
+3. Phase 9 committed (371e0f8). Keep asking before each commit; no Co-Authored-By trailer.
 
 ## Blocked on the owner
 - **Mercado Livre real inspection** (brief phase 7): owner registers the seller URL in Marketplaces, authorizes,

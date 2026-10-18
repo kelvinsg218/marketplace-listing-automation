@@ -1,7 +1,7 @@
-# Current status — 2026-10-18, v0.1.0 + phase 9 (uncommitted)
+# Current status — 2026-10-18, v0.1.0 + phase 9 (committed 371e0f8)
 
 **Phases 0–3 complete; phase 9 (master catalog, import center, compatibility, listing preparation, accounts)
-implemented and tested locally.** Nothing of phase 9 is committed yet (waiting for the owner's OK).
+implemented and tested locally.** Committed and pushed in 371e0f8; showcase (README + docs/showcase) updated.
 Tests: 178 passed (169 fast + 9 browser/E2E in headless Edge); pyflakes clean.
 Fixed the crash found in the owner's first test (log 2026-10-13: Marketplaces "Adicionar conta" received Qt's
 `clicked(bool)` instead of the marketplace); same pattern fixed in the catalog "Adicionar ao grupo" menu.
