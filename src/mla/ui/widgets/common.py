@@ -259,6 +259,48 @@ class EmptyState(QWidget):
             layout.addWidget(action, 0, Qt.AlignmentFlag.AlignHCenter)
 
 
+class Callout(QFrame):
+    """Inline note inside a form: violet for guidance, amber when the user must check something."""
+
+    def __init__(self, text: str = "", warn: bool = False, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName("calloutWarn" if warn else "callout")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 9, 12, 9)
+        layout.setSpacing(10)
+        glyph = QLabel()
+        glyph.setPixmap(icon("triangle-alert" if warn else "info", T.warning if warn else T.violet_text, 16)
+                        .pixmap(QSize(16, 16)))
+        layout.addWidget(glyph, 0, Qt.AlignmentFlag.AlignTop)
+        self.text = label(text, wrap=True)
+        layout.addWidget(self.text, 1)
+
+    def set_text(self, text: str) -> None:
+        self.text.setText(text)
+        self.setVisible(bool(text))
+
+
+class StepRail(QWidget):
+    """Numbered steps of a wizard; the current one is underlined in violet."""
+
+    def __init__(self, steps: list[str], parent: QWidget | None = None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+        self.labels = []
+        for number, text in enumerate(steps, start=1):
+            item = label(f"{number}  {text}")
+            item.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            layout.addWidget(item, 1)
+            self.labels.append(item)
+        self.set_current(0)
+
+    def set_current(self, index: int) -> None:
+        for position, item in enumerate(self.labels):
+            set_prop(item, "step", "done" if position < index else "current" if position == index else "todo")
+
+
 class Toast(QLabel):
     """Short confirmation in the bottom-right corner; fades out by itself."""
 
@@ -334,7 +376,8 @@ def thumbnail(path: Path, size: int) -> QPixmap:
 
 
 __all__ = [
-    "ICON_SIZE", "EmptyState", "PageHeader", "Panel", "StatusChip", "button", "confirm", "divider",
+    "ICON_SIZE", "Callout", "EmptyState", "PageHeader", "Panel", "StatusChip", "StepRail", "button", "confirm",
+    "divider",
     "icon_button", "inform", "label", "paint_chip", "repolish", "set_prop", "show_toast", "thumbnail",
     "StatusDelegate", "clear_layout", "format_when", "plural",
 ]

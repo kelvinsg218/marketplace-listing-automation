@@ -9,7 +9,9 @@ from PySide6.QtGui import QColor, QFont, QFontDatabase, QPalette
 from PySide6.QtWidgets import QApplication
 
 from mla.config.paths import resource_path
-from mla.core.enums import CatalogStatus, ItemStatus, ListingStatus
+from mla.core.enums import (
+    CatalogStatus, ConnectionStatus, ImportAction, ImportStatus, ItemStatus, ListingStatus, Verification,
+)
 
 
 class T:
@@ -63,9 +65,17 @@ STATUS_TONE = {
     ListingStatus.QUEUED: "violet", ListingStatus.RUNNING: "active",
     ListingStatus.AWAITING_REVIEW: "warning", ListingStatus.PUBLISHED: "success",
     ListingStatus.FAILED: "danger", ListingStatus.CANCELLED: "muted",
+    ListingStatus.APPROVED: "active", ListingStatus.NEEDS_ATTENTION: "danger",
     ItemStatus.QUEUED: "violet", ItemStatus.RUNNING: "active", ItemStatus.AWAITING_REVIEW: "warning",
     ItemStatus.PUBLISHED: "success", ItemStatus.FAILED: "danger", ItemStatus.CANCELLED: "muted",
     ItemStatus.SKIPPED: "muted", ItemStatus.NEEDS_ATTENTION: "danger",
+    ImportAction.CREATE: "violet", ImportAction.UPDATE: "active", ImportAction.UNCHANGED: "muted",
+    ImportAction.SKIP: "muted", ImportAction.ERROR: "danger", ImportAction.REVIEW: "warning",
+    ImportStatus.PLANNING: "active", ImportStatus.PLANNED: "warning", ImportStatus.COMMITTING: "active",
+    ImportStatus.COMPLETED: "success", ImportStatus.DISCARDED: "muted",
+    Verification.CONFIRMED: "success", Verification.UNVERIFIED: "warning", Verification.REJECTED: "muted",
+    ConnectionStatus.UNKNOWN: "neutral", ConnectionStatus.CONNECTED: "success",
+    ConnectionStatus.LOGIN_REQUIRED: "warning", ConnectionStatus.EXPIRED: "warning",
 }
 
 
@@ -207,6 +217,11 @@ QMenu::item {{ padding: 6px 18px; border-radius: 4px; }}
 QMenu::item:selected {{ background: {T.violet_wash}; }}
 QMessageBox {{ background: {T.surface}; }}
 #toast {{ background: {T.raised_hi}; border: 1px solid {T.line_strong}; border-radius: 8px; padding: 10px 14px; }}
+QLabel[step="todo"] {{ color: {T.text_3}; padding: 6px 2px; border-bottom: 2px solid {T.line}; }}
+QLabel[step="current"] {{ color: {T.text}; font-weight: 600; padding: 6px 2px; border-bottom: 2px solid {T.violet}; }}
+QLabel[step="done"] {{ color: {T.violet_text}; padding: 6px 2px; border-bottom: 2px solid {T.violet_lo}; }}
+QFrame#callout {{ background: {T.violet_wash}; border: 1px solid {T.violet_lo}; border-radius: {T.r_control}px; }}
+QFrame#calloutWarn {{ background: {T.warning_wash}; border: 1px solid {T.warning}; border-radius: {T.r_control}px; }}
 #dropZone {{ border: 1px dashed {T.line_strong}; border-radius: {T.r_panel}px; background: {T.canvas}; }}
 #dropZone[active="true"] {{ border: 1px dashed {T.violet}; background: {T.violet_wash}; }}
 """

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from mla.automation.adapters import adapter_for
@@ -90,6 +91,41 @@ class QueueManager:
         log.info("job %s criado com %s itens", job.id, len(items))
         return result
 
+    def enqueue_listings(self, listings: list[Listing], block: Callable[[Listing], str | None],
+                         label: str = "") -> EnqueueResult:
+        """Queue prepared listings (each already tied to an account). `block` adds the caller's own checks."""
+        result = EnqueueResult()
+        items: list[JobItem] = []
+        for listing in listings:
+            product = self.products.get(listing.product_id)
+            name = product.internal_name if product else ""
+            reason = None
+            if product is None:
+                reason = "Produto não encontrado."
+            elif not adapter_for(listing.marketplace).implemented:
+                reason = f"A automação do {listing.marketplace.label} ainda não está disponível nesta versão."
+            else:
+                account = self.accounts.get(listing.account_id)
+                if account is None or not account.is_active:
+                    reason = "A conta do anúncio não existe mais ou está desativada."
+            reason = reason or self._duplicate_reason(listing.product_id, listing.marketplace, listing.account_id)                 or block(listing)
+            if reason:
+                result.skipped.append(Skipped(listing.product_id, name, listing.marketplace, reason))
+                continue
+            items.append(JobItem(job_id=0, product_id=listing.product_id, marketplace=listing.marketplace,
+                                 account_id=listing.account_id, product_name=name, sku=product.sku))
+        if not items:
+            return result
+        job = Job(label=label or (items[0].product_name if len(items) == 1 else f"{len(items)} anúncios"),
+                  kind="batch" if len(items) > 1 else "product")
+        result.job_id = self.repo.create_job(job, items)
+        result.queued = len(items)
+        for item in items:
+            self.repo.upsert_listing(Listing(item.product_id, item.marketplace, item.account_id,
+                                             ListingStatus.QUEUED, last_item_id=item.id))
+        log.info("job %s criado com %s anúncio(s) aprovado(s)", job.id, len(items))
+        return result
+
     def _block_reason(self, product, marketplace: Marketplace, report) -> str | None:
         if not adapter_for(marketplace).implemented:
             return f"A automação do {marketplace.label} ainda não está disponível nesta versão."
@@ -171,7 +207,7 @@ class QueueManager:
                               finished_at=now)
         listing_status = {
             ItemStatus.PUBLISHED: ListingStatus.PUBLISHED, ItemStatus.FAILED: ListingStatus.FAILED,
-            ItemStatus.NEEDS_ATTENTION: ListingStatus.FAILED, ItemStatus.CANCELLED: ListingStatus.CANCELLED,
+            ItemStatus.NEEDS_ATTENTION: ListingStatus.NEEDS_ATTENTION, ItemStatus.CANCELLED: ListingStatus.CANCELLED,
         }.get(status)
         if item.product_id is not None and listing_status is not None:
             existing = self.repo.get_listing(item.product_id, item.marketplace, item.account_id)

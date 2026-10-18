@@ -44,33 +44,52 @@ class CatalogStatus(StrEnum):
 
 
 class ListingStatus(StrEnum):
-    """State of one product on one marketplace account."""
+    """Lifecycle of one offer (product × marketplace × account).
+
+    Preparation: draft → incomplete → ready (for review) → approved.
+    Publication: queued → running → awaiting_review → published | failed | needs_attention | cancelled.
+    Only a confirmed publication (proof read back from the marketplace) reaches PUBLISHED.
+    """
     DRAFT = "draft"
     INCOMPLETE = "incomplete"
     READY = "ready"
+    APPROVED = "approved"
     QUEUED = "queued"
     RUNNING = "running"
     AWAITING_REVIEW = "awaiting_review"
     PUBLISHED = "published"
     FAILED = "failed"
+    NEEDS_ATTENTION = "needs_attention"
     CANCELLED = "cancelled"
 
     @property
     def label(self) -> str:
         return LISTING_LABELS[self]
 
+    @property
+    def in_preparation(self) -> bool:
+        return self in PREPARATION_STATUSES
+
+    @property
+    def in_execution(self) -> bool:
+        return self in (ListingStatus.QUEUED, ListingStatus.RUNNING, ListingStatus.AWAITING_REVIEW)
+
 
 LISTING_LABELS = {
     ListingStatus.DRAFT: "Rascunho",
     ListingStatus.INCOMPLETE: "Incompleto",
-    ListingStatus.READY: "Pronto",
+    ListingStatus.READY: "Pronto para revisão",
+    ListingStatus.APPROVED: "Aprovado",
     ListingStatus.QUEUED: "Na fila",
     ListingStatus.RUNNING: "Em execução",
     ListingStatus.AWAITING_REVIEW: "Aguardando revisão",
-    ListingStatus.PUBLISHED: "Publicado",
+    ListingStatus.PUBLISHED: "Publicado confirmado",
     ListingStatus.FAILED: "Falha",
+    ListingStatus.NEEDS_ATTENTION: "Requer intervenção",
     ListingStatus.CANCELLED: "Cancelado",
 }
+PREPARATION_STATUSES = frozenset({ListingStatus.DRAFT, ListingStatus.INCOMPLETE, ListingStatus.READY,
+                                  ListingStatus.APPROVED})
 
 
 class JobStatus(StrEnum):
@@ -114,3 +133,86 @@ TERMINAL_ITEM_STATUSES = frozenset({
     ItemStatus.PUBLISHED, ItemStatus.FAILED, ItemStatus.CANCELLED,
     ItemStatus.SKIPPED, ItemStatus.NEEDS_ATTENTION,
 })
+
+
+class ConnectionStatus(StrEnum):
+    """Result of the last account connection test."""
+    UNKNOWN = "unknown"
+    CONNECTED = "connected"
+    LOGIN_REQUIRED = "login_required"
+    EXPIRED = "expired"
+    UNVERIFIED = "unverified"  # page opened, but this marketplace's login check is not mapped yet
+    ERROR = "error"
+
+    @property
+    def label(self) -> str:
+        return {ConnectionStatus.UNKNOWN: "Não testada", ConnectionStatus.CONNECTED: "Conectada",
+                ConnectionStatus.LOGIN_REQUIRED: "Login necessário", ConnectionStatus.EXPIRED: "Sessão expirada",
+                ConnectionStatus.UNVERIFIED: "Não verificada", ConnectionStatus.ERROR: "Falha de conexão"}[self]
+
+
+class CommercialStatus(StrEnum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    DISCONTINUED = "discontinued"
+
+    @property
+    def label(self) -> str:
+        return {CommercialStatus.ACTIVE: "Ativo", CommercialStatus.INACTIVE: "Inativo",
+                CommercialStatus.DISCONTINUED: "Fora de linha"}[self]
+
+
+class DataSource(StrEnum):
+    """Where a piece of information came from. Only CLIENT data is treated as fact by default."""
+    CLIENT = "client"
+    MANUFACTURER = "manufacturer"
+    EXTERNAL = "external"
+    AI = "ai"
+
+    @property
+    def label(self) -> str:
+        return {DataSource.CLIENT: "Cliente", DataSource.MANUFACTURER: "Fabricante",
+                DataSource.EXTERNAL: "Fonte externa", DataSource.AI: "Sugestão de IA"}[self]
+
+
+class Verification(StrEnum):
+    CONFIRMED = "confirmed"
+    UNVERIFIED = "unverified"
+    REJECTED = "rejected"
+
+    @property
+    def label(self) -> str:
+        return {Verification.CONFIRMED: "Confirmada", Verification.UNVERIFIED: "Não verificada",
+                Verification.REJECTED: "Rejeitada"}[self]
+
+
+class ImportStatus(StrEnum):
+    PLANNING = "planning"
+    PLANNED = "planned"
+    COMMITTING = "committing"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    FAILED = "failed"
+    DISCARDED = "discarded"
+
+    @property
+    def label(self) -> str:
+        return {ImportStatus.PLANNING: "Analisando", ImportStatus.PLANNED: "Aguardando confirmação",
+                ImportStatus.COMMITTING: "Gravando", ImportStatus.COMPLETED: "Concluída",
+                ImportStatus.CANCELLED: "Cancelada", ImportStatus.FAILED: "Falhou",
+                ImportStatus.DISCARDED: "Descartada"}[self]
+
+
+class ImportAction(StrEnum):
+    """What the plan found for one source row (the user's decision is stored separately)."""
+    CREATE = "create"
+    UPDATE = "update"
+    UNCHANGED = "unchanged"
+    SKIP = "skip"
+    ERROR = "error"
+    REVIEW = "review"  # ambiguous extraction (e.g. PDF): needs the user's explicit decision
+
+    @property
+    def label(self) -> str:
+        return {ImportAction.CREATE: "Novo", ImportAction.UPDATE: "Atualizar", ImportAction.UNCHANGED: "Sem mudanças",
+                ImportAction.SKIP: "Ignorar", ImportAction.ERROR: "Erro", ImportAction.REVIEW: "Revisar"}[self]

@@ -18,10 +18,13 @@ from mla.services.context import AppContext
 from mla.ui.execution_bridge import ExecutionBridge
 from mla.ui.icons import icon
 from mla.ui.pages.automations import AutomationsPage
+from mla.ui.pages.compatibility import CompatibilityPage
 from mla.ui.pages.dashboard import DashboardPage
 from mla.ui.pages.groups import GroupsPage
 from mla.ui.pages.history import HistoryPage
+from mla.ui.pages.imports import ImportsPage
 from mla.ui.pages.license import LicensePage
+from mla.ui.pages.listings import ListingsPage
 from mla.ui.pages.marketplaces import MarketplacesPage
 from mla.ui.pages.products import ProductsPage
 from mla.ui.pages.settings import SettingsPage
@@ -32,7 +35,10 @@ log = logging.getLogger(__name__)
 
 NAV = [
     ("dashboard", "Dashboard", "layout-dashboard"),
-    ("products", "Produtos", "package"),
+    ("products", "Catálogo", "package"),
+    ("imports", "Importações", "file-up"),
+    ("compatibility", "Compatibilidades", "puzzle"),
+    ("listings", "Anúncios", "tag"),
     ("groups", "Grupos", "layers"),
     ("automations", "Automações", "workflow"),
     ("history", "Histórico", "history"),
@@ -82,6 +88,9 @@ class MainWindow(QMainWindow):
         self.pages = {
             "dashboard": DashboardPage(ctx, nav),
             "products": ProductsPage(ctx, nav),
+            "imports": ImportsPage(ctx, nav),
+            "compatibility": CompatibilityPage(ctx, nav),
+            "listings": ListingsPage(ctx, nav, self.services),
             "groups": GroupsPage(ctx, nav),
             "automations": AutomationsPage(ctx, nav, self.services),
             "history": HistoryPage(ctx, nav),
@@ -91,7 +100,7 @@ class MainWindow(QMainWindow):
         }
         for page in self.pages.values():
             self.stack.addWidget(page)
-        for index, (key, _, _) in enumerate(NAV, start=1):
+        for index, (key, _, _) in enumerate(NAV[:9], start=1):
             QShortcut(QKeySequence(f"Ctrl+{index}"), self, activated=lambda k=key: self.navigate(k))
         QShortcut(QKeySequence("Ctrl+N"), self, activated=lambda: self.navigate("products", new=True))
         self.navigate("dashboard")
@@ -101,6 +110,9 @@ class MainWindow(QMainWindow):
         if recovered:
             show_toast(self, f"{recovered} execução(ões) interrompida(s) foram recuperadas; confira em Automações.",
                        "warning")
+        if ctx.recovered_imports:
+            show_toast(self, f"{ctx.recovered_imports} importação(ões) interrompida(s) foram desfeitas com segurança; "
+                       "confira em Importações.", "warning")
 
     # ------------------------------------------------------------------ sidebar
     def _build_sidebar(self) -> QWidget:
@@ -128,7 +140,7 @@ class MainWindow(QMainWindow):
             btn.setIcon(icon(icon_name, T.text_3, 18, active_color=T.violet_hi))
             btn.setIconSize(QSize(18, 18))
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setToolTip(f"{text} (Ctrl+{index + 1})")
+            btn.setToolTip(f"{text} (Ctrl+{index + 1})" if index < 9 else text)
             btn.clicked.connect(lambda _c=False, k=key: self.navigate(k))
             self.nav_group.addButton(btn)
             self.nav_buttons[key] = btn

@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from mla.core.enums import Condition, Marketplace
+from mla.core.enums import CommercialStatus, Condition, Marketplace
 from mla.core.models import Product, ProductMarketplaceData, ProductVariant
 from mla.core.units import ParseError, format_money, format_scaled, parse_money, parse_scaled
 from mla.services.catalog import CatalogError, CatalogService
@@ -30,10 +30,17 @@ CSV_COLUMNS = [
     "description", "features", "material", "package_contents", "warranty", "price", "stock",
     "weight_g", "length_cm", "width_cm", "height_cm", "package_type", "availability_days",
     "shipping_notes", "marketplaces", "images",
+    # master catalog (0004)
+    "commercial_name", "manufacturer_code", "gtin", "supplier", "cost", "promo_price", "min_stock", "unit",
+    "commercial_status", "technical_description", "color", "manufacturer_refs", "internal_notes",
 ]
 _TEXT_FIELDS = ["internal_name", "title", "category", "subcategory", "brand", "model", "description",
-                "features", "material", "package_contents", "warranty", "package_type", "shipping_notes"]
-_JSON_INT_FIELDS = ["price_cents", "stock", "weight_g", "length_mm", "width_mm", "height_mm", "availability_days"]
+                "features", "material", "package_contents", "warranty", "package_type", "shipping_notes",
+                "commercial_name", "manufacturer_code", "gtin", "supplier", "unit", "original_description",
+                "technical_description", "color", "manufacturer_refs", "internal_notes"]
+_CSV_TEXT_FIELDS = [f for f in _TEXT_FIELDS if f != "original_description"]
+_JSON_INT_FIELDS = ["price_cents", "stock", "weight_g", "length_mm", "width_mm", "height_mm", "availability_days",
+                    "cost_cents", "promo_price_cents", "min_stock"]
 
 
 @dataclass
@@ -94,8 +101,12 @@ class ImportExportService:
             writer = csv.DictWriter(fh, fieldnames=CSV_COLUMNS, delimiter=";")
             writer.writeheader()
             for p in products:
-                row = {name: getattr(p, name) for name in _TEXT_FIELDS}
+                row = {name: getattr(p, name) for name in _CSV_TEXT_FIELDS}
                 row.update(
+                    cost=format_money(p.cost_cents, symbol=False),
+                    promo_price=format_money(p.promo_price_cents, symbol=False),
+                    min_stock=p.min_stock if p.min_stock is not None else "",
+                    commercial_status=p.commercial_status.value,
                     sku=p.sku, condition=p.condition.value, price=format_money(p.price_cents, symbol=False),
                     stock=p.stock, weight_g=p.weight_g if p.weight_g is not None else "",
                     length_cm=format_scaled(p.length_mm, 10), width_cm=format_scaled(p.width_mm, 10),
@@ -112,6 +123,9 @@ class ImportExportService:
         data.update({name: getattr(p, name) for name in _JSON_INT_FIELDS})
         data["sku"] = p.sku
         data["condition"] = p.condition.value
+        data["commercial_status"] = p.commercial_status.value
+        data["specs"] = dict(p.specs)
+        data["custom_attributes"] = dict(p.custom_attributes)
         data["images"] = [{"file": files[i.filename], "main": i.is_main} for i in p.images if i.filename in files]
         data["variants"] = [{"name": v.name, "attributes": v.attributes, "sku": v.sku,
                              "price_cents": v.price_cents, "stock": v.stock} for v in p.variants]
@@ -171,6 +185,13 @@ class ImportExportService:
         if existing and mode == "skip":
             result.skipped += 1
             return
+        current = self.catalog.get(existing) if existing else None
+        known: set[str] = set()
+        if current is not None:
+            # never drop what the file does not carry: keep current images, files and pending media
+            product.images = list(current.images)
+            product.files, product.missing_media = current.files, current.missing_media
+            known = {i.sha256 for i in current.images}
         for spec in images:
             try:
                 path = Path(spec["file"])
@@ -178,7 +199,10 @@ class ImportExportService:
             except (ImageError, OSError, KeyError) as exc:
                 result.errors.append(f"{where}: imagem ignorada ({exc})")
                 continue
-            image.is_main = bool(spec.get("main"))
+            if image.sha256 in known:
+                continue
+            known.add(image.sha256)
+            image.is_main = bool(spec.get("main")) and current is None
             product.images.append(image)
         if existing:
             product.id = existing
@@ -200,7 +224,10 @@ class ImportExportService:
         for name in _JSON_INT_FIELDS:
             value = row.get(name)
             kwargs[name] = int(value) if value not in (None, "") else (0 if name == "stock" else None)
-        product = Product(sku=str(row.get("sku") or ""), condition=Condition(row.get("condition") or "new"), **kwargs)
+        product = Product(sku=str(row.get("sku") or ""), condition=Condition(row.get("condition") or "new"),
+                          commercial_status=CommercialStatus(row.get("commercial_status") or "active"),
+                          specs=dict(row.get("specs") or {}),
+                          custom_attributes=dict(row.get("custom_attributes") or {}), **kwargs)
         for v in row.get("variants") or []:
             product.variants.append(ProductVariant(
                 name=str(v.get("name") or ""), attributes=dict(v.get("attributes") or {}),
@@ -226,11 +253,14 @@ class ImportExportService:
         aliases = {"novo": "new", "usado": "used", "recondicionado": "refurbished"}
         product = Product(
             sku=text("sku"), condition=Condition(aliases.get(condition_raw, condition_raw)),
+            commercial_status=CommercialStatus(text("commercial_status").lower() or "active"),
+            cost_cents=parse_money(text("cost")), promo_price_cents=parse_money(text("promo_price")),
+            min_stock=integer("min_stock"),
             price_cents=parse_money(text("price")), stock=integer("stock") or 0,
             weight_g=integer("weight_g"), length_mm=parse_scaled(text("length_cm"), 10),
             width_mm=parse_scaled(text("width_cm"), 10), height_mm=parse_scaled(text("height_cm"), 10),
             availability_days=integer("availability_days"),
-            **{name: text(name) for name in _TEXT_FIELDS},
+            **{name: text(name) for name in _CSV_TEXT_FIELDS},
         )
         for key in text("marketplaces").replace(";", ",").split(","):
             key = key.strip().lower()

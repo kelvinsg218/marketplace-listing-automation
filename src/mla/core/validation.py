@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from mla.core.enums import CatalogStatus, Marketplace
+from mla.core.enums import CatalogStatus, CommercialStatus, Marketplace
 from mla.core.models import Product
 
 Severity = Literal["error", "warning"]
@@ -70,6 +70,46 @@ class ValidationReport:
         return [i for i in self.issues if i.field == field_name]
 
 
+@dataclass(frozen=True)
+class CategoryRule:
+    """Extra requirements for products whose category starts with `category` (case-insensitive).
+
+    Configured by the user (setting catalog.category_rules); nothing is required by default.
+    """
+    category: str
+    required: tuple[str, ...] = ()  # Product attribute names, e.g. ("gtin", "model")
+    requires_compatibility: bool = False
+
+    def matches(self, category: str) -> bool:
+        return bool(self.category.strip()) and category.strip().lower().startswith(self.category.strip().lower())
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "CategoryRule":
+        return cls(category=str(data.get("category") or ""), required=tuple(data.get("required") or ()),
+                   requires_compatibility=bool(data.get("requires_compatibility")))
+
+
+RULE_FIELD_LABELS = {
+    "gtin": "GTIN/EAN", "brand": "marca", "model": "modelo", "manufacturer_code": "código do fabricante",
+    "color": "cor", "material": "material", "warranty": "garantia", "technical_description": "descrição técnica",
+    "supplier": "fornecedor", "unit": "unidade de medida",
+}
+
+
+def normalize_gtin(text: str) -> str:
+    return "".join(ch for ch in (text or "") if ch.isdigit())
+
+
+def gtin_valid(code: str) -> bool:
+    """GTIN-8/12/13/14 check digit (GS1 mod 10)."""
+    if len(code) not in (8, 12, 13, 14) or not code.isdigit():
+        return False
+    digits = [int(ch) for ch in code]
+    body, check = digits[:-1], digits[-1]
+    total = sum(d * (3 if i % 2 == 0 else 1) for i, d in enumerate(reversed(body)))
+    return (10 - total % 10) % 10 == check
+
+
 def validate_identity(product: Product) -> list[str]:
     """Minimum needed to save a record at all."""
     problems = []
@@ -82,7 +122,9 @@ def validate_identity(product: Product) -> list[str]:
     return problems
 
 
-def validate_product(product: Product) -> ValidationReport:
+def validate_product(product: Product, rules: tuple[CategoryRule, ...] | list[CategoryRule] = (),
+                     compat_count: int | None = None) -> ValidationReport:
+    """`rules` add category requirements; `compat_count` (confirmed compatibilities) is checked only when given."""
     report = ValidationReport()
     for message in validate_identity(product):
         report.add("sku" if "SKU" in message else "internal_name", message)
@@ -134,21 +176,55 @@ def validate_product(product: Product) -> ValidationReport:
     if any(d is None or d <= 0 for d in dims):
         report.add("dimensions", "Informe comprimento, largura e altura da embalagem.")
 
+    _validate_master(product, report)
+    for rule in rules:
+        if not rule.matches(product.category):
+            continue
+        for name in rule.required:
+            if not str(getattr(product, name, "") or "").strip():
+                label = RULE_FIELD_LABELS.get(name, name)
+                report.add(name, f"A categoria {rule.category} exige {label}.")
+        if rule.requires_compatibility and compat_count is not None and compat_count == 0:
+            report.add("compatibility", f"A categoria {rule.category} exige ao menos uma compatibilidade "
+                                        "confirmada.")
+
     for marketplace in product.enabled_marketplaces():
-        rules = MARKETPLACE_RULES.get(marketplace)
-        if rules is None:
+        mp_rules = MARKETPLACE_RULES.get(marketplace)
+        if mp_rules is None:
             continue
         title = product.title.strip()
-        if rules.max_title and len(title) > rules.max_title:
+        if mp_rules.max_title and len(title) > mp_rules.max_title:
             report.add("title", f"Título com {len(title)} caracteres; o limite no {marketplace.label} "
-                                f"é {rules.max_title}.", "error", marketplace)
-        if rules.max_images and len(product.images) > rules.max_images:
-            report.add("images", f"O {marketplace.label} usa no máximo {rules.max_images} imagens; "
+                                f"é {mp_rules.max_title}.", "error", marketplace)
+        if mp_rules.max_images and len(product.images) > mp_rules.max_images:
+            report.add("images", f"O {marketplace.label} usa no máximo {mp_rules.max_images} imagens; "
                                  f"as demais serão ignoradas.", "warning", marketplace)
         price = product.price_for(marketplace)
         if price is not None and price <= 0:
             report.add("price", f"Preço inválido para o {marketplace.label}.", "error", marketplace)
     return report
+
+
+def _validate_master(product: Product, report: ValidationReport) -> None:
+    """Consistency of the optional master-catalog fields: warnings, never required."""
+    gtin = product.gtin.strip()
+    if gtin and not gtin_valid(gtin):
+        report.add("gtin", f"GTIN/EAN {gtin} com dígito verificador inválido; confira o código.", "warning")
+    price = product.price_cents
+    if product.promo_price_cents is not None and price is not None and product.promo_price_cents >= price:
+        report.add("promo_price", "O preço promocional precisa ser menor que o preço de venda.", "warning")
+    if product.cost_cents is not None and price is not None and 0 < price < product.cost_cents:
+        report.add("price", "Preço de venda abaixo do preço de custo.", "warning")
+    if product.min_stock is not None and product.stock < product.min_stock and not product.variants:
+        report.add("stock", f"Estoque ({product.stock}) abaixo do mínimo ({product.min_stock}).", "warning")
+    if product.commercial_status is not CommercialStatus.ACTIVE:
+        report.add("commercial_status", f"Produto marcado como {product.commercial_status.label.lower()}.",
+                   "warning")
+    missing = [m for m in product.missing_media if m.kind == "image"]
+    if missing:
+        text = ("1 imagem citada na importação não foi encontrada." if len(missing) == 1 else
+                f"{len(missing)} imagens citadas na importação não foram encontradas.")
+        report.add("images", text, "warning")
 
 
 def derive_status(product: Product, report: ValidationReport | None = None) -> CatalogStatus:

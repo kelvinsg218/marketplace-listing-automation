@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Painel do vendedor — Feira Local (simulada)</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><strong>Feira Local</strong><span>Conta: <span id="seller-name"></span></span></header>
+<main>
+  <h1>Painel do vendedor</h1>
+  <p class="hint">Ambiente de teste do MLA. Nada aqui é publicado de verdade.</p>
+  <nav aria-label="Vendas">
+    <a id="sell-link" href="sell.html">Anunciar produto</a>
+  </nav>
+  <button id="logout" type="button">Sair</button>
+</main>
+<script>
+const session = localStorage.getItem('sim_session');
+if (!session) {
+  location.replace('login.html?next=home.html');
+} else {
+  document.getElementById('seller-name').textContent = session;
+}
+document.getElementById('logout').onclick = () => {
+  localStorage.removeItem('sim_session');
+  location.replace('login.html?next=home.html');
+};
+</script>
+</body>
+</html>

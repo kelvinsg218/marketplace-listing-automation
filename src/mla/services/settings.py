@@ -11,6 +11,10 @@ DEFAULTS: dict[str, Any] = {
     "automation.screenshot_on_failure": True,
     "backup.auto_on_start": True,
     "backup.keep": 15,
+    # [{"category": "Autopeças", "required": ["gtin", "model"], "requires_compatibility": true}]
+    "catalog.category_rules": [],
+    # optimisation agents that send catalog data outside this computer need explicit consent
+    "ai.external_providers_allowed": False,
 }
 
 BROWSER_CHANNELS = {"msedge": "Microsoft Edge (recomendado)", "chrome": "Google Chrome",

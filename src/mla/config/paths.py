@@ -46,9 +46,19 @@ class AppPaths:
     def exports(self) -> Path:
         return self.root / "exports"
 
+    @property
+    def files(self) -> Path:
+        """Technical files attached to products (content-addressed)."""
+        return self.root / "files"
+
+    @property
+    def imports(self) -> Path:
+        """Staging area for archives being imported (one folder per batch)."""
+        return self.root / "imports"
+
     def ensure(self) -> "AppPaths":
         for path in (self.root, self.images, self.logs, self.backups,
-                     self.browser_profiles, self.artifacts, self.exports):
+                     self.browser_profiles, self.artifacts, self.exports, self.files, self.imports):
             path.mkdir(parents=True, exist_ok=True)
         return self
 

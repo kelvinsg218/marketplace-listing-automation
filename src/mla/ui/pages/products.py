@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemView, QComboBox, QFileDialog, QHBoxLayout, QHeaderView, QLineEdit, QMenu, QStackedLayout,
+    QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QHeaderView, QLineEdit, QMenu, QStackedLayout,
     QStyledItemDelegate, QTableView, QWidget,
 )
 
-from mla.core.enums import CatalogStatus, Marketplace
+from mla.core.enums import CatalogStatus, CommercialStatus, Marketplace
 from mla.core.models import ProductSummary
 from mla.core.units import format_money
 from mla.persistence.repositories import ProductQuery
@@ -17,12 +18,13 @@ from mla.ui.icons import icon
 from mla.ui.pages.base import Page
 from mla.ui.theme import T, tone_for
 from mla.ui.widgets.common import (
-    EmptyState, button, confirm, format_when, inform, label, paint_chip, plural, show_toast, thumbnail,
+    EmptyState, button, confirm, format_when, label, paint_chip, plural, show_toast, thumbnail,
 )
 
 COLUMNS = [("Produto", "internal_name"), ("Status", "status"), ("Preço", "price_cents"),
-           ("Estoque", "stock"), ("Marketplaces", None), ("Atualizado", "updated_at")]
+           ("Estoque", "stock"), ("Mídia", None), ("Compat.", None), ("Atualizado", "updated_at")]
 ROW_HEIGHT = 56
+PAGE_SIZE = 200  # rows loaded per step; more are fetched as the user scrolls
 MP_SHORT = {Marketplace.MERCADO_LIVRE: "ML", Marketplace.SHOPEE: "Shopee", Marketplace.SIMULATED: "Simulado"}
 
 
@@ -32,11 +34,35 @@ class ProductTableModel(QAbstractTableModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.rows: list[ProductSummary] = []
+        self.total = 0
+        self._loader = None
 
     def set_rows(self, rows: list[ProductSummary]) -> None:
         self.beginResetModel()
-        self.rows = rows
+        self.rows, self.total, self._loader = rows, len(rows), None
         self.endResetModel()
+
+    def load(self, loader, total: int) -> None:
+        """Incremental loading: `loader(offset, limit)` returns the next rows of the current query."""
+        self.beginResetModel()
+        self._loader, self.total = loader, total
+        self.rows = loader(0, PAGE_SIZE) if total else []
+        self.endResetModel()
+
+    def canFetchMore(self, parent=QModelIndex()) -> bool:
+        return not parent.isValid() and self._loader is not None and len(self.rows) < self.total
+
+    def fetchMore(self, parent=QModelIndex()) -> None:
+        if not self.canFetchMore(parent):
+            return
+        more = self._loader(len(self.rows), PAGE_SIZE)
+        if not more:
+            self.total = len(self.rows)
+            return
+        start = len(self.rows)
+        self.beginInsertRows(QModelIndex(), start, start + len(more) - 1)
+        self.rows += more
+        self.endInsertRows()
 
     def rowCount(self, parent=QModelIndex()) -> int:
         return 0 if parent.isValid() else len(self.rows)
@@ -68,14 +94,19 @@ class ProductTableModel(QAbstractTableModel):
             if col == 3:
                 return str(row.stock)
             if col == 4:
-                return "  ".join(MP_SHORT[m] for m in row.marketplaces) or "—"
+                text = plural(row.image_count, "imagem", "imagens") if row.image_count else "Sem imagem"
+                return text + (f", {plural(row.missing_media, 'pendente', 'pendentes')}" if row.missing_media else "")
             if col == 5:
+                return str(row.compat_count) if row.compat_count else "—"
+            if col == 6:
                 return format_when(row.updated_at)
         if role == Qt.ItemDataRole.TextAlignmentRole:
             if col in (2, 3):
                 return int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             return int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        if role == Qt.ItemDataRole.ForegroundRole and col in (4, 5):
+        if role == Qt.ItemDataRole.ForegroundRole and col == 4 and (row.missing_media or not row.image_count):
+            return QColor(T.warning)
+        if role == Qt.ItemDataRole.ForegroundRole and col in (4, 5, 6):
             return QColor(T.text_2)
         if role == Qt.ItemDataRole.AccessibleTextRole:
             return f"{row.internal_name}, SKU {row.sku}, {row.status.label}"
@@ -143,17 +174,16 @@ class ProductDelegate(QStyledItemDelegate):
 
 class ProductsPage(Page):
     key = "products"
-    title = "Produtos"
+    title = "Catálogo mestre"
 
     def __init__(self, ctx, navigate, parent=None):
         super().__init__(ctx, navigate, parent)
         self._query = ProductQuery()
         io_menu = QMenu(self)
-        io_menu.addAction("Importar CSV…", lambda: self._import("csv"))
-        io_menu.addAction("Importar JSON…", lambda: self._import("json"))
+        io_menu.addAction("Importar base de produtos…", lambda: self.navigate("imports", wizard=True))
         io_menu.addSeparator()
         io_menu.addAction("Exportar CSV…", lambda: self._export("csv"))
-        io_menu.addAction("Exportar JSON…", lambda: self._export("json"))
+        io_menu.addAction("Exportar JSON (completo, com variações)…", lambda: self._export("json"))
         io_btn = button("Importar e exportar", "secondary", "download")
         io_btn.setMenu(io_menu)
         self.header.add_action(io_btn)
@@ -162,7 +192,8 @@ class ProductsPage(Page):
         bar = QHBoxLayout()
         bar.setSpacing(8)
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Buscar por nome, título, SKU, categoria ou marca")
+        self.search.setPlaceholderText("Buscar por nome, SKU (inclusive de variação), GTIN, código do fabricante, "
+                                       "marca ou fornecedor")
         self.search.addAction(icon("search", T.text_3, 16), QLineEdit.ActionPosition.LeadingPosition)
         self.search.setClearButtonEnabled(True)
         self._debounce = QTimer(self, singleShot=True, interval=220, timeout=self.refresh)
@@ -174,6 +205,16 @@ class ProductsPage(Page):
             self.status_filter.addItem(status.label, status)
         self.status_filter.currentIndexChanged.connect(self.refresh)
         bar.addWidget(self.status_filter)
+        self.commercial_filter = QComboBox()
+        self.commercial_filter.addItem("Toda situação comercial", None)
+        for status in CommercialStatus:
+            self.commercial_filter.addItem(status.label, status)
+        self.commercial_filter.currentIndexChanged.connect(self.refresh)
+        bar.addWidget(self.commercial_filter)
+        self.missing_filter = QCheckBox("Mídia pendente")
+        self.missing_filter.setToolTip("Produtos com imagens ou arquivos citados na importação e não encontrados")
+        self.missing_filter.toggled.connect(self.refresh)
+        bar.addWidget(self.missing_filter)
         self.group_filter = QComboBox()
         self.group_filter.currentIndexChanged.connect(self.refresh)
         bar.addWidget(self.group_filter)
@@ -182,12 +223,13 @@ class ProductsPage(Page):
         selection_bar = QHBoxLayout()
         self.count_label = label("", role="hint")
         selection_bar.addWidget(self.count_label, 1)
+        self.prepare_btn = button("Preparar anúncios", "primary", "tag", self._prepare_listings)
         self.run_btn = button("Executar", "secondary", "play", self._run_selected)
         self.edit_btn = button("Editar", "ghost", "pencil", self._edit_selected)
         self.dup_btn = button("Duplicar", "ghost", "copy", self._duplicate_selected)
         self.group_btn = button("Adicionar ao grupo", "ghost", "layers", self._add_to_group)
         self.del_btn = button("Excluir", "danger", "trash-2", self._delete_selected)
-        for b in (self.run_btn, self.edit_btn, self.dup_btn, self.group_btn, self.del_btn):
+        for b in (self.prepare_btn, self.run_btn, self.edit_btn, self.dup_btn, self.group_btn, self.del_btn):
             selection_bar.addWidget(b)
         self.root.addLayout(selection_bar)
 
@@ -198,7 +240,7 @@ class ProductsPage(Page):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setSortingEnabled(True)
-        self.table.horizontalHeader().setSortIndicator(5, Qt.SortOrder.DescendingOrder)
+        self.table.horizontalHeader().setSortIndicator(6, Qt.SortOrder.DescendingOrder)
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(ROW_HEIGHT)
         self.table.setShowGrid(False)
@@ -207,7 +249,7 @@ class ProductsPage(Page):
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setHighlightSections(False)
-        for col, width in ((1, 170), (2, 110), (3, 80), (4, 130), (5, 140)):
+        for col, width in ((1, 130), (2, 100), (3, 70), (4, 150), (5, 64), (6, 110)):
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
             header.resizeSection(col, width)
         header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -217,8 +259,10 @@ class ProductsPage(Page):
         self.table.customContextMenuRequested.connect(self._context_menu)
 
         self.empty = EmptyState("package", "Nenhum produto cadastrado",
-                                "Cadastre o primeiro produto ou importe uma planilha CSV com o seu catálogo.",
-                                button("Novo produto", "primary", "plus", self.new_product))
+                                "Cadastre o primeiro produto ou importe a base da empresa (planilha, XML, JSON, PDF "
+                                "ou ZIP com fotos) pela Central de Importações.",
+                                button("Importar base de produtos", "primary", "file-up",
+                                       lambda: self.navigate("imports", wizard=True)))
         self.no_results = EmptyState("search", "Nada encontrado", "Ajuste a busca ou os filtros.")
         holder = QWidget()
         self.stack = QStackedLayout(holder)
@@ -247,14 +291,19 @@ class ProductsPage(Page):
         self._query.text = self.search.text()
         self._query.status = self.status_filter.currentData()
         self._query.group_id = self.group_filter.currentData()
+        self._query.commercial_status = self.commercial_filter.currentData()
+        self._query.missing_media_only = self.missing_filter.isChecked()
         selected = set(self.selected_ids())
-        rows = self.ctx.catalog.search(self._query)
-        self.model.set_rows(rows)
-        for r, summary in enumerate(rows):
+        query = replace(self._query)
+        total = self.ctx.products.count(query)
+        self.model.load(lambda offset, limit: self.ctx.catalog.search(replace(query, offset=offset, limit=limit)),
+                        total)
+        for r, summary in enumerate(self.model.rows):
             if summary.id in selected:
                 self.table.selectRow(r)
-        filtered = bool(self._query.text or self._query.status or self._query.group_id)
-        self.stack.setCurrentIndex(0 if rows else (2 if filtered else 1))
+        filtered = bool(query.text or query.status or query.group_id or query.commercial_status
+                        or query.missing_media_only)
+        self.stack.setCurrentIndex(0 if total else (2 if filtered else 1))
         total = self.ctx.products.count_by_status()
         self.header.set_subtitle(f"{plural(sum(total.values()), 'cadastrado', 'cadastrados')}, "
                                  f"{plural(total[CatalogStatus.READY], 'pronto', 'prontos')} para anunciar")
@@ -276,14 +325,14 @@ class ProductsPage(Page):
 
     def _sync_actions(self, *_args) -> None:
         n = len(self.selected_ids())
-        for b in (self.run_btn, self.dup_btn, self.group_btn, self.del_btn):
+        for b in (self.prepare_btn, self.run_btn, self.dup_btn, self.group_btn, self.del_btn):
             b.setVisible(n > 0)
         self.edit_btn.setVisible(n == 1)
         if n:
             self.count_label.setText(plural(n, "selecionado", "selecionados"))
-        elif self.model.rows:
-            self.count_label.setText(f"{plural(len(self.model.rows), 'produto exibido', 'produtos exibidos')}. "
-                                     "Selecione para executar, duplicar ou excluir.")
+        elif self.model.total:
+            self.count_label.setText(f"{plural(self.model.total, 'produto encontrado', 'produtos encontrados')}. "
+                                     "Selecione para preparar anúncios, duplicar ou excluir.")
 
     def _sort(self, field: str, descending: bool) -> None:
         self._query.order_by, self._query.descending = field, descending
@@ -337,7 +386,7 @@ class ProductsPage(Page):
         groups = self.ctx.groups.list()
         menu = QMenu(self)
         for group in groups:
-            menu.addAction(group.name, lambda g=group: self._do_add_to_group(g.id, g.name, ids))
+            menu.addAction(group.name, lambda _checked=False, g=group: self._do_add_to_group(g.id, g.name, ids))
         if groups:
             menu.addSeparator()
         menu.addAction("Novo grupo…", lambda: self.navigate("groups", new=True, product_ids=ids))
@@ -358,6 +407,7 @@ class ProductsPage(Page):
         menu = QMenu(self)
         if len(self.selected_ids()) == 1:
             menu.addAction(icon("pencil"), "Editar", self._edit_selected)
+        menu.addAction(icon("tag"), "Preparar anúncios…", self._prepare_listings)
         menu.addAction(icon("play"), "Executar", self._run_selected)
         menu.addAction(icon("copy"), "Duplicar", self._duplicate_selected)
         menu.addAction(icon("layers"), "Adicionar ao grupo", self._add_to_group)
@@ -367,24 +417,16 @@ class ProductsPage(Page):
         menu.addAction(icon("trash-2", T.danger), "Excluir", self._delete_selected)
         menu.exec(self.table.viewport().mapToGlobal(pos))
 
-    def _import(self, kind: str) -> None:
-        pattern = "Planilha CSV (*.csv)" if kind == "csv" else "Catálogo JSON (*.json)"
-        path, _ = QFileDialog.getOpenFileName(self, "Importar produtos", "", pattern)
-        if not path:
+    def _prepare_listings(self) -> None:
+        ids = self.selected_ids()
+        if not ids:
             return
-        update = confirm(self, "Produtos já existentes",
-                         "Se um SKU do arquivo já existir no catálogo, deseja atualizar o produto com os dados do "
-                         "arquivo? Escolha Cancelar para manter os existentes e importar apenas os novos.",
-                         "Atualizar existentes")
-        mode = "update" if update else "skip"
-        service = self.ctx.import_export
-        result = service.import_csv(Path(path), mode) if kind == "csv" else service.import_json(Path(path), mode)
-        self.refresh()
-        if result.errors:
-            details = "\n".join(result.errors[:15]) + ("\n…" if len(result.errors) > 15 else "")
-            inform(self, "Importação concluída com avisos", f"{result.summary()}.\n\n{details}", error=False)
-        else:
-            show_toast(self, f"Importação concluída: {result.summary()}", "success")
+        from mla.ui.pages.listings import PrepareListingsDialog
+        dialog = PrepareListingsDialog(self.ctx, ids, self)
+        if dialog.exec() and dialog.result_info is not None:
+            marketplace, account_id, result = dialog.result_info
+            show_toast(self, result.summary(), "success" if result.created else "neutral")
+            self.navigate("listings", marketplace=marketplace, account_id=account_id)
 
     def _export(self, kind: str, ids: list[int] | None = None) -> None:
         default = str(self.ctx.paths.exports / f"catalogo.{kind}")

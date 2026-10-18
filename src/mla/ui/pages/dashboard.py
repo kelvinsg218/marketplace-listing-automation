@@ -79,10 +79,12 @@ class DashboardPage(Page):
                 Stage("ready", "Pronto", by_cat.get(CatalogStatus.READY, 0), "#5B49B8"),
             ]),
             ("Anúncios", [
+                Stage("approved", "Aprovado", listing_totals.get(ListingStatus.APPROVED, 0), T.violet_lo),
                 Stage("queued", "Na fila", in_queue, T.violet),
                 Stage("review", "Aguardando revisão", listing_totals.get(ListingStatus.AWAITING_REVIEW, 0), T.violet_hi),
                 Stage("published", "Publicado", listing_totals.get(ListingStatus.PUBLISHED, 0), T.success),
-                Stage("failed", "Falha", listing_totals.get(ListingStatus.FAILED, 0), T.danger),
+                Stage("failed", "Falha", listing_totals.get(ListingStatus.FAILED, 0)
+                      + listing_totals.get(ListingStatus.NEEDS_ATTENTION, 0), T.danger),
             ]),
         ])
         self._fill_recent(stats.recent)
@@ -155,10 +157,14 @@ class DashboardPage(Page):
             bar.setFixedHeight(6)
             bar.setAccessibleName(f"{marketplace.label}: {published} de {total} publicados")
             block.addWidget(bar)
-            failed = counts.get(ListingStatus.FAILED, 0)
-            pending = total - published - failed - counts.get(ListingStatus.CANCELLED, 0)
+            failed = counts.get(ListingStatus.FAILED, 0) + counts.get(ListingStatus.NEEDS_ATTENTION, 0)
+            preparing = sum(n for status, n in counts.items() if status.in_preparation)
+            running = sum(n for status, n in counts.items() if status.in_execution)
+            parts = [text for n, text in ((preparing, f"{preparing} em preparação"),
+                                          (running, f"{running} na fila ou em execução"),
+                                          (failed, f"{failed} com falha ou intervenção")) if n]
             if total:
-                block.addWidget(label(f"{pending} em andamento, {failed} com falha", role="hint"))
+                block.addWidget(label(", ".join(parts) if parts else "Nada pendente", role="hint"))
             self.market_box.addLayout(block)
 
     def _open_stage(self, key: str) -> None:
@@ -166,6 +172,7 @@ class DashboardPage(Page):
             "draft": ("products", {"status": CatalogStatus.DRAFT}),
             "incomplete": ("products", {"status": CatalogStatus.INCOMPLETE}),
             "ready": ("products", {"status": CatalogStatus.READY}),
+            "approved": ("listings", {}),
             "queued": ("automations", {}),
             "review": ("automations", {}),
             "published": ("history", {"status": ItemStatus.PUBLISHED}),

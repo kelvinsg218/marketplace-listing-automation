@@ -1,28 +1,35 @@
 from __future__ import annotations
 
 import copy
+import os
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QFrame, QGridLayout, QHBoxLayout, QHeaderView,
-    QLabel, QLineEdit, QPlainTextEdit, QScrollArea, QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget,
-    QVBoxLayout, QWidget,
+    QAbstractItemView, QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout,
+    QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPlainTextEdit, QScrollArea, QSpinBox, QTableWidget,
+    QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget,
 )
 
-from mla.core.enums import CatalogStatus, Condition, Marketplace
-from mla.core.models import Product, ProductMarketplaceData, ProductVariant
+from mla.core.enums import CatalogStatus, CommercialStatus, Condition, Marketplace, Verification
+from mla.core.models import Compatibility, Product, ProductMarketplaceData, ProductVariant
 from mla.core.units import ParseError, format_money, parse_money
-from mla.core.validation import MARKETPLACE_RULES, derive_status, validate_product
+from mla.core.validation import MARKETPLACE_RULES, derive_status
 from mla.services.catalog import CatalogError
+from mla.services.compatibility import CompatibilityError
+from mla.services.files import FileStoreError
 from mla.ui.icons import pixmap
 from mla.ui.theme import T
 from mla.ui.widgets.common import StatusChip, button, clear_layout, divider, inform, label, set_prop
 from mla.ui.widgets.image_gallery import ImageGallery
 
 LISTING_TYPES = {Marketplace.MERCADO_LIVRE: ["", "Clássico", "Premium"]}
-FIELD_TAB = {"internal_name": 0, "sku": 0, "title": 0, "category": 0, "brand": 0, "description": 1,
-             "images": 2, "price": 3, "stock": 3, "variants": 3, "weight": 4, "dimensions": 4}
+# tabs: 0 Básico, 1 Descrição, 2 Técnico, 3 Imagens, 4 Comercial, 5 Logística, 6 Compatibilidade, 7 Marketplaces
+FIELD_TAB = {"internal_name": 0, "sku": 0, "title": 0, "category": 0, "brand": 0, "model": 0, "gtin": 0,
+             "manufacturer_code": 0, "commercial_status": 0, "description": 1, "images": 3, "price": 4,
+             "promo_price": 4, "stock": 4, "variants": 4, "weight": 5, "dimensions": 5, "compatibility": 6}
+TAB_PRICE = 4
 
 
 def _field(caption: str, widget: QWidget, hint: str = "") -> QWidget:
@@ -184,9 +191,11 @@ class ProductEditor(QDialog):
 
         self._build_basic()
         self._build_description()
+        self._build_technical()
         self._build_images()
         self._build_commercial()
         self._build_logistics()
+        self._build_compatibility()
         self._build_marketplaces()
 
         body.addSpacing(24)
@@ -226,19 +235,34 @@ class ProductEditor(QDialog):
         title_box = _field("Título do anúncio", self.title_edit)
         title_box.layout().addWidget(self.title_counter)
         grid.addWidget(title_box, 1, 0, 1, 2)
+        self.commercial_name = QLineEdit()
+        self.commercial_name.setPlaceholderText("Nome usado na loja ou no catálogo do fornecedor")
+        grid.addWidget(_field("Nome comercial", self.commercial_name), 2, 0)
+        self.commercial_status = QComboBox()
+        for status in CommercialStatus:
+            self.commercial_status.addItem(status.label, status)
+        grid.addWidget(_field("Situação comercial", self.commercial_status), 2, 1)
         self.category = QLineEdit()
-        grid.addWidget(_field("Categoria", self.category), 2, 0)
+        grid.addWidget(_field("Categoria", self.category), 3, 0)
         self.subcategory = QLineEdit()
-        grid.addWidget(_field("Subcategoria", self.subcategory), 2, 1)
+        grid.addWidget(_field("Subcategoria", self.subcategory), 3, 1)
         self.brand = QLineEdit()
-        grid.addWidget(_field("Marca", self.brand), 3, 0)
+        grid.addWidget(_field("Marca", self.brand), 4, 0)
         self.model = QLineEdit()
-        grid.addWidget(_field("Modelo", self.model), 3, 1)
+        grid.addWidget(_field("Modelo", self.model), 4, 1)
+        self.manufacturer_code = QLineEdit()
+        self.manufacturer_code.setPlaceholderText("Part number / código do fabricante")
+        grid.addWidget(_field("Código do fabricante", self.manufacturer_code), 5, 0)
+        self.gtin = QLineEdit()
+        self.gtin.setPlaceholderText("EAN/GTIN com 8, 12, 13 ou 14 dígitos")
+        grid.addWidget(_field("GTIN/EAN", self.gtin, "Opcional; o dígito verificador é conferido."), 5, 1)
+        self.supplier = QLineEdit()
+        grid.addWidget(_field("Fornecedor", self.supplier), 6, 0)
         self.condition = QComboBox()
         for condition in Condition:
             self.condition.addItem(condition.label, condition)
-        grid.addWidget(_field("Condição", self.condition), 4, 0)
-        grid.setRowStretch(5, 1)
+        grid.addWidget(_field("Condição", self.condition), 6, 1)
+        grid.setRowStretch(7, 1)
         self.tabs.addTab(_scroll(page), "Básico")
 
     def _build_description(self) -> None:
@@ -270,7 +294,98 @@ class ProductEditor(QDialog):
         self.gallery = ImageGallery(self.ctx.images)
         layout.addWidget(self.gallery, 1)
         self.gallery.changed.connect(self._schedule)
+        extras = QHBoxLayout()
+        extras.setSpacing(16)
+        files_box = QVBoxLayout()
+        files_box.addWidget(label("Arquivos técnicos", object_name="sectionTitle"))
+        self.files_list = QListWidget()
+        self.files_list.setMaximumHeight(110)
+        self.files_list.itemDoubleClicked.connect(self._open_file)
+        files_box.addWidget(self.files_list)
+        files_row = QHBoxLayout()
+        files_row.addWidget(button("Anexar arquivo…", "ghost", "plus", self._add_files))
+        files_row.addWidget(button("Remover", "ghost", "trash-2", self._remove_file))
+        files_row.addStretch(1)
+        files_box.addLayout(files_row)
+        extras.addLayout(files_box, 1)
+        pending_box = QVBoxLayout()
+        pending_box.addWidget(label("Mídias pendentes", object_name="sectionTitle"))
+        self.pending_list = QListWidget()
+        self.pending_list.setMaximumHeight(110)
+        self.pending_list.setToolTip("Citadas na importação e não encontradas. Importe as fotos (pasta ou ZIP) "
+                                     "com o mesmo nome para ligar automaticamente.")
+        pending_box.addWidget(self.pending_list)
+        pending_row = QHBoxLayout()
+        pending_row.addWidget(button("Dispensar selecionada", "ghost", "x", self._dismiss_pending))
+        pending_row.addStretch(1)
+        pending_box.addLayout(pending_row)
+        extras.addLayout(pending_box, 1)
+        layout.addLayout(extras)
         self.tabs.addTab(page, "Imagens")
+
+    def _build_technical(self) -> None:
+        page, grid = _form_page()
+        self.technical_description = QPlainTextEdit()
+        self.technical_description.setMinimumHeight(110)
+        self.technical_description.setPlaceholderText("Ficha técnica: medidas, normas, composição, aplicação.")
+        grid.addWidget(_field("Descrição técnica", self.technical_description), 0, 0, 1, 2)
+        self.color = QLineEdit()
+        grid.addWidget(_field("Cor", self.color), 1, 0)
+        self.manufacturer_refs = QLineEdit()
+        self.manufacturer_refs.setPlaceholderText("Códigos equivalentes ou de referência do fabricante")
+        grid.addWidget(_field("Referências de fabricante", self.manufacturer_refs), 1, 1)
+        self.specs = _kv_table("Especificação", "Valor")
+        grid.addWidget(_field("Especificações adicionais", self.specs, "Uma por linha (ex.: Voltagem = 12 V)."), 2, 0)
+        self.custom_attributes = _kv_table("Atributo", "Valor")
+        grid.addWidget(_field("Atributos personalizados", self.custom_attributes,
+                              "Dados próprios da empresa (ex.: Linha = Premium)."), 2, 1)
+        kv_row = QHBoxLayout()
+        kv_row.addWidget(button("Adicionar especificação", "ghost", "plus", lambda: _kv_add(self.specs)))
+        kv_row.addWidget(button("Adicionar atributo", "ghost", "plus", lambda: _kv_add(self.custom_attributes)))
+        kv_row.addStretch(1)
+        kv_holder = QWidget()
+        kv_holder.setLayout(kv_row)
+        kv_row.setContentsMargins(0, 0, 0, 0)
+        grid.addWidget(kv_holder, 3, 0, 1, 2)
+        self.internal_notes = QPlainTextEdit()
+        self.internal_notes.setFixedHeight(70)
+        self.internal_notes.setPlaceholderText("Não aparecem em anúncios.")
+        grid.addWidget(_field("Observações internas", self.internal_notes), 4, 0, 1, 2)
+        self.original_description = QPlainTextEdit()
+        self.original_description.setReadOnly(True)
+        self.original_description.setFixedHeight(70)
+        self.original_box = _field("Descrição original (como veio da base do cliente)", self.original_description)
+        grid.addWidget(self.original_box, 5, 0, 1, 2)
+        self.source_label = label("", role="hint")
+        grid.addWidget(self.source_label, 6, 0, 1, 2)
+        grid.setRowStretch(7, 1)
+        self.tabs.addTab(_scroll(page), "Técnico")
+
+    def _build_compatibility(self) -> None:
+        from mla.ui.pages.compatibility import compat_table
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(4, 18, 12, 18)
+        layout.setSpacing(10)
+        layout.addWidget(label("Veículos, aparelhos ou equipamentos com que este produto funciona. Cadastre só "
+                               "informações com fonte; fontes externas ficam como não verificadas.",
+                               role="muted", wrap=True))
+        self.compat_table = compat_table(["Marca", "Modelo", "Versão", "Anos", "Referência", "Origem",
+                                          "Verificação"])
+        compat_header = self.compat_table.horizontalHeader()
+        compat_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        for col, width in ((0, 90), (2, 80), (3, 110), (4, 90), (5, 140), (6, 150)):
+            compat_header.resizeSection(col, width)
+        self.compat_table.doubleClicked.connect(lambda _i: self._edit_compat())
+        layout.addWidget(self.compat_table, 1)
+        row = QHBoxLayout()
+        row.addWidget(button("Adicionar compatibilidade", "secondary", "plus", self._add_compat))
+        row.addWidget(button("Editar", "ghost", "pencil", self._edit_compat))
+        row.addWidget(button("Confirmar", "ghost", "badge-check", self._confirm_compat))
+        row.addWidget(button("Remover", "ghost", "trash-2", self._remove_compat))
+        row.addStretch(1)
+        layout.addLayout(row)
+        self.tabs.addTab(page, "Compatibilidade")
 
     def _build_commercial(self) -> None:
         page, grid = _form_page()
@@ -281,7 +396,20 @@ class ProductEditor(QDialog):
         self.stock.setRange(0, 1_000_000)
         self.stock.setGroupSeparatorShown(True)
         grid.addWidget(_field("Estoque", self.stock, "Com variações, o estoque é a soma das variações."), 0, 1)
-        grid.addWidget(label("Variações", object_name="sectionTitle"), 1, 0)
+        self.cost = QLineEdit()
+        self.cost.setPlaceholderText("0,00")
+        grid.addWidget(_field("Preço de custo (R$)", self.cost), 1, 0)
+        self.promo_price = QLineEdit()
+        self.promo_price.setPlaceholderText("Opcional")
+        grid.addWidget(_field("Preço promocional (R$)", self.promo_price), 1, 1)
+        self.min_stock = QSpinBox()
+        self.min_stock.setRange(-1, 1_000_000)
+        self.min_stock.setSpecialValueText("Não informado")
+        grid.addWidget(_field("Estoque mínimo", self.min_stock), 2, 0)
+        self.unit = QLineEdit()
+        self.unit.setPlaceholderText("Ex.: un, par, kit, cx, m")
+        grid.addWidget(_field("Unidade de medida", self.unit), 2, 1)
+        grid.addWidget(label("Variações", object_name="sectionTitle"), 3, 0)
         self.variants = QTableWidget(0, 5)
         self.variants.setHorizontalHeaderLabels(["Nome", "Atributos (Chave=Valor; …)", "SKU", "Preço (R$)", "Estoque"])
         self.variants.verticalHeader().setVisible(False)
@@ -292,15 +420,15 @@ class ProductEditor(QDialog):
             header.resizeSection(col, width)
         self.variants.setMinimumHeight(180)
         self.variants.itemChanged.connect(self._schedule)
-        grid.addWidget(self.variants, 2, 0, 1, 2)
+        grid.addWidget(self.variants, 4, 0, 1, 2)
         row = QHBoxLayout()
         row.addWidget(button("Adicionar variação", "secondary", "plus", self._add_variant))
         row.addWidget(button("Remover selecionadas", "ghost", "trash-2", self._remove_variants))
         row.addStretch(1)
         holder = QWidget()
         holder.setLayout(row)
-        grid.addWidget(holder, 3, 0, 1, 2)
-        grid.setRowStretch(4, 1)
+        grid.addWidget(holder, 5, 0, 1, 2)
+        grid.setRowStretch(6, 1)
         self.tabs.addTab(_scroll(page), "Comercial")
 
     def _build_logistics(self) -> None:
@@ -385,6 +513,27 @@ class ProductEditor(QDialog):
         self.brand.setText(p.brand)
         self.model.setText(p.model)
         self.condition.setCurrentIndex(self.condition.findData(p.condition))
+        self.commercial_name.setText(p.commercial_name)
+        self.commercial_status.setCurrentIndex(self.commercial_status.findData(p.commercial_status))
+        self.manufacturer_code.setText(p.manufacturer_code)
+        self.gtin.setText(p.gtin)
+        self.supplier.setText(p.supplier)
+        self.cost.setText(format_money(p.cost_cents, symbol=False))
+        self.promo_price.setText(format_money(p.promo_price_cents, symbol=False))
+        self.min_stock.setValue(-1 if p.min_stock is None else p.min_stock)
+        self.unit.setText(p.unit)
+        self.technical_description.setPlainText(p.technical_description)
+        self.color.setText(p.color)
+        self.manufacturer_refs.setText(p.manufacturer_refs)
+        _kv_fill(self.specs, p.specs)
+        _kv_fill(self.custom_attributes, p.custom_attributes)
+        self.internal_notes.setPlainText(p.internal_notes)
+        self.original_description.setPlainText(p.original_description)
+        self.original_box.setVisible(bool(p.original_description))
+        self.source_label.setText(f"Origem do cadastro: {p.source}" if p.source else "")
+        self._fill_files()
+        self.compat_items = self.ctx.compatibility.list_for_product(p.id) if p.id else []
+        self._fill_compat()
         self.description.setPlainText(p.description)
         self.features.setPlainText(p.features)
         self.material.setText(p.material)
@@ -405,8 +554,13 @@ class ProductEditor(QDialog):
         for marketplace, section in self.sections.items():
             section.load(p.marketplace_data.get(marketplace))
         for widget in (self.internal_name, self.sku, self.title_edit, self.category, self.subcategory, self.brand,
-                       self.model, self.material, self.warranty, self.price, self.package_type):
+                       self.model, self.material, self.warranty, self.price, self.package_type, self.gtin, self.cost,
+                       self.promo_price, self.commercial_name, self.manufacturer_code, self.supplier, self.unit,
+                       self.color, self.manufacturer_refs):
             widget.textChanged.connect(self._schedule)
+        self.commercial_status.currentIndexChanged.connect(self._schedule)
+        self.min_stock.valueChanged.connect(self._schedule)
+        self.technical_description.textChanged.connect(self._schedule)
         for widget in (self.description, self.features, self.package_contents, self.shipping_notes):
             widget.textChanged.connect(self._schedule)
         for widget in (self.stock, self.weight, self.availability):
@@ -424,20 +578,36 @@ class ProductEditor(QDialog):
         p.subcategory = self.subcategory.text().strip()
         p.brand = self.brand.text().strip()
         p.model = self.model.text().strip()
-        p.condition = self.condition.currentData()
+        p.condition = Condition(self.condition.currentData())
+        p.commercial_name = self.commercial_name.text().strip()
+        p.commercial_status = CommercialStatus(self.commercial_status.currentData())
+        p.manufacturer_code = self.manufacturer_code.text().strip()
+        p.gtin = self.gtin.text().strip()
+        p.supplier = self.supplier.text().strip()
+        p.unit = self.unit.text().strip()
+        p.min_stock = None if self.min_stock.value() < 0 else self.min_stock.value()
+        p.technical_description = self.technical_description.toPlainText()
+        p.color = self.color.text().strip()
+        p.manufacturer_refs = self.manufacturer_refs.text().strip()
+        p.specs = _kv_collect(self.specs)
+        p.custom_attributes = _kv_collect(self.custom_attributes)
+        p.internal_notes = self.internal_notes.toPlainText()
         p.description = self.description.toPlainText()
         p.features = self.features.toPlainText()
         p.material = self.material.text().strip()
         p.warranty = self.warranty.text().strip()
         p.package_contents = self.package_contents.toPlainText()
         p.images = self.gallery.images()
-        try:
-            p.price_cents = parse_money(self.price.text())
-            self._money_error = False
-        except ParseError:
-            p.price_cents = None
-            self._money_error = True
-        set_prop(self.price, "invalid", self._money_error)
+        self._money_error = False
+        for widget, attr in ((self.price, "price_cents"), (self.cost, "cost_cents"),
+                             (self.promo_price, "promo_price_cents")):
+            try:
+                setattr(p, attr, parse_money(widget.text()))
+                set_prop(widget, "invalid", False)
+            except ParseError:
+                setattr(p, attr, None)
+                self._money_error = True
+                set_prop(widget, "invalid", True)
         p.stock = self.stock.value()
         p.variants = self._collect_variants()
         if p.variants:
@@ -493,7 +663,7 @@ class ProductEditor(QDialog):
 
     def _revalidate(self) -> None:
         product = self._collect()
-        report = validate_product(product)
+        report = self.ctx.catalog.validate(product)
         status = derive_status(product, report)
         self.chip.set_status(status)
         limits = [(m, MARKETPLACE_RULES[m].max_title) for m in product.enabled_marketplaces()
@@ -518,10 +688,11 @@ class ProductEditor(QDialog):
         warnings = report.warnings()
         if self._money_error:
             errors = [*errors]
-            self.issue_box.addWidget(self._issue_row("Preço em formato inválido. Use, por exemplo, 129,90.",
+            self.issue_box.addWidget(self._issue_row("Valor em reais em formato inválido. Use, por exemplo, 129,90.",
                                                      "error", "price"))
         if status is CatalogStatus.READY:
-            self.side_summary.setText("Cadastro completo. Ative um marketplace e use Executar para preparar o anúncio.")
+            self.side_summary.setText("Cadastro completo. No Catálogo, use Preparar anúncios para escolher o "
+                                      "marketplace e a conta.")
         else:
             self.side_summary.setText(f"{len(errors)} item(ns) para completar antes de anunciar.")
         for issue in errors:
@@ -573,7 +744,7 @@ class ProductEditor(QDialog):
     def _save(self) -> None:
         product = self._collect()
         if self._money_error:
-            self.tabs.setCurrentIndex(3)
+            self.tabs.setCurrentIndex(TAB_PRICE)
             self.price.setFocus()
             return
         try:
@@ -582,4 +753,131 @@ class ProductEditor(QDialog):
             inform(self, "Não foi possível salvar", str(exc), error=True)
             self.tabs.setCurrentIndex(0)
             return
+        try:
+            self.ctx.compatibility.replace_for_product(product.id, self.compat_items)
+        except CompatibilityError as exc:
+            inform(self, "Produto salvo, compatibilidades não", f"O produto foi salvo, mas as compatibilidades "
+                   f"não: {exc}", error=True)
+            self.tabs.setCurrentIndex(FIELD_TAB["compatibility"])
+            return
         self.accept()
+
+    # ------------------------------------------------------------------ files and pending media
+    def _fill_files(self) -> None:
+        self.files_list.clear()
+        for item in self.product.files:
+            entry = QListWidgetItem(item.original_name or item.filename)
+            entry.setToolTip("Clique duas vezes para abrir")
+            self.files_list.addItem(entry)
+        self.pending_list.clear()
+        for missing in self.product.missing_media:
+            self.pending_list.addItem(QListWidgetItem(f"{missing.reference}   {missing.origin}".strip()))
+
+    def _add_files(self) -> None:
+        paths, _ = QFileDialog.getOpenFileNames(self, "Anexar arquivos técnicos", "",
+                                                "Documentos (*.pdf *.txt *.csv *.xlsx *.docx *.dwg *.dxf *.step *.stp);;"
+                                                "Todos os arquivos (*.*)")
+        for path in paths:
+            try:
+                stored = self.ctx.files.import_file(Path(path))
+            except FileStoreError as exc:
+                inform(self, "Arquivo não anexado", str(exc), error=True)
+                continue
+            if stored.sha256 not in {f.sha256 for f in self.product.files}:
+                self.product.files.append(stored)
+        self._fill_files()
+
+    def _remove_file(self) -> None:
+        row = self.files_list.currentRow()
+        if 0 <= row < len(self.product.files):
+            del self.product.files[row]
+            self._fill_files()
+
+    def _open_file(self, _item=None) -> None:
+        row = self.files_list.currentRow()
+        if 0 <= row < len(self.product.files):
+            path = self.ctx.files.path_for(self.product.files[row].filename)
+            if path.exists() and path.suffix.lower() in (".pdf", ".txt", ".csv", ".xlsx", ".docx", ".jpg", ".png"):
+                os.startfile(path)  # opened by the user's default program; MLA never runs files itself
+
+    def _dismiss_pending(self) -> None:
+        row = self.pending_list.currentRow()
+        if 0 <= row < len(self.product.missing_media):
+            del self.product.missing_media[row]
+            self._fill_files()
+            self._schedule()
+
+    # ------------------------------------------------------------------ compatibility (saved with the product)
+    def _fill_compat(self) -> None:
+        from mla.ui.pages.compatibility import fill_compat_row
+        self.compat_table.setRowCount(len(self.compat_items))
+        for row, item in enumerate(self.compat_items):
+            fill_compat_row(self.compat_table, row, item, with_product=False)
+        self.tabs.setTabText(FIELD_TAB["compatibility"], f"Compatibilidade ({len(self.compat_items)})"
+                             if self.compat_items else "Compatibilidade")
+
+    def _compat_row(self) -> int:
+        rows = self.compat_table.selectionModel().selectedRows()
+        return rows[0].row() if rows else -1
+
+    def _add_compat(self) -> None:
+        from mla.ui.pages.compatibility import CompatibilityDialog
+        dialog = CompatibilityDialog(self.ctx, Compatibility(self.product.id, "", verification=Verification.CONFIRMED,
+                                                             sku=self.sku.text(),
+                                                             product_name=self.internal_name.text()), parent=self)
+        if dialog.exec():
+            self.compat_items.append(dialog.collect())
+            self._fill_compat()
+
+    def _edit_compat(self) -> None:
+        from mla.ui.pages.compatibility import CompatibilityDialog
+        row = self._compat_row()
+        if row < 0:
+            return
+        dialog = CompatibilityDialog(self.ctx, copy.deepcopy(self.compat_items[row]), parent=self)
+        if dialog.exec():
+            self.compat_items[row] = dialog.collect()
+            self._fill_compat()
+
+    def _confirm_compat(self) -> None:
+        for index in self.compat_table.selectionModel().selectedRows():
+            self.compat_items[index.row()].verification = Verification.CONFIRMED
+        self._fill_compat()
+
+    def _remove_compat(self) -> None:
+        for row in sorted({i.row() for i in self.compat_table.selectionModel().selectedRows()}, reverse=True):
+            del self.compat_items[row]
+        self._fill_compat()
+
+
+def _kv_table(key_caption: str, value_caption: str) -> QTableWidget:
+    table = QTableWidget(0, 2)
+    table.setHorizontalHeaderLabels([key_caption, value_caption])
+    table.verticalHeader().setVisible(False)
+    table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+    table.horizontalHeader().resizeSection(0, 150)
+    table.setMinimumHeight(150)
+    return table
+
+
+def _kv_add(table: QTableWidget, key: str = "", value: str = "") -> None:
+    row = table.rowCount()
+    table.insertRow(row)
+    table.setItem(row, 0, QTableWidgetItem(key))
+    table.setItem(row, 1, QTableWidgetItem(value))
+
+
+def _kv_fill(table: QTableWidget, data: dict[str, str]) -> None:
+    table.setRowCount(0)
+    for key, value in data.items():
+        _kv_add(table, key, value)
+
+
+def _kv_collect(table: QTableWidget) -> dict[str, str]:
+    result = {}
+    for row in range(table.rowCount()):
+        key = table.item(row, 0).text().strip() if table.item(row, 0) else ""
+        value = table.item(row, 1).text().strip() if table.item(row, 1) else ""
+        if key and value:
+            result[key] = value
+    return result

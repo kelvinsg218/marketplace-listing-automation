@@ -26,6 +26,49 @@ def make_png(path: Path, width: int = 800, height: int = 800, color: tuple[int, 
     return path
 
 
+def make_pdf(path: Path, lines: list[tuple[int, int, str]]) -> Path:
+    """Write a one-page text PDF (Helvetica, WinAnsi); lines are (x, y, text) in points."""
+    def escape(text: str) -> str:
+        return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+    stream = "\n".join(f"BT /F1 10 Tf {x} {y} Td ({escape(t)}) Tj ET" for x, y, t in lines).encode("cp1252")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >>"
+        b" /Contents 4 0 R >>",
+        b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for number, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n" % number + body + b"\nendobj\n"
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
+    out += b"".join(b"%010d 00000 n \n" % offset for offset in offsets)
+    out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(bytes(out))
+    return path
+
+
+def pdf_table(path: Path, rows: list[tuple[str, ...]], columns: tuple[int, ...] = (50, 150, 380, 470),
+              title: str = "Catálogo Auto Peças Horizonte (fictício)") -> Path:
+    lines = [(50, 800, title)]
+    y = 760
+    for row in rows:
+        lines += [(x, y, cell) for x, cell in zip(columns, row) if cell]
+        y -= 18
+    return make_pdf(path, lines)
+
+
+@pytest.fixture
+def pdf_builder():
+    return pdf_table, make_pdf
+
+
 @pytest.fixture
 def paths(tmp_path: Path) -> AppPaths:
     return AppPaths(tmp_path / "data").ensure()

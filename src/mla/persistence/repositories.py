@@ -7,10 +7,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from mla.core.enums import (
-    CatalogStatus, Condition, ItemStatus, JobStatus, ListingStatus, Marketplace,
+    CatalogStatus, CommercialStatus, Condition, ConnectionStatus, ItemStatus, JobStatus, ListingStatus, Marketplace,
 )
 from mla.core.models import (
-    ExecutionLog, Job, JobItem, Listing, MarketplaceAccount, Product, ProductGroup,
+    ExecutionLog, Job, JobItem, Listing, MarketplaceAccount, MissingMedia, Product, ProductFile, ProductGroup,
     ProductImage, ProductMarketplaceData, ProductSummary, ProductVariant,
 )
 from mla.persistence.db import Database, now_iso
@@ -20,7 +20,13 @@ PRODUCT_FIELDS = (
     "description", "features", "material", "package_contents", "warranty", "price_cents", "stock",
     "weight_g", "length_mm", "width_mm", "height_mm", "package_type", "availability_days",
     "shipping_notes", "status",
+    # master catalog (0004)
+    "commercial_name", "manufacturer_code", "gtin", "supplier", "cost_cents", "promo_price_cents", "min_stock",
+    "unit", "commercial_status", "original_description", "technical_description", "color", "manufacturer_refs",
+    "internal_notes", "source",
 )
+PRODUCT_JSON_FIELDS = {"specs": "specs_json", "custom_attributes": "custom_attributes_json"}
+_PRODUCT_COLUMNS = (*PRODUCT_FIELDS, *PRODUCT_JSON_FIELDS.values())
 
 
 class DuplicateSkuError(ValueError):
@@ -34,6 +40,8 @@ def _product_values(p: Product) -> list[Any]:
     for name in PRODUCT_FIELDS:
         value = getattr(p, name)
         values.append(value.value if hasattr(value, "value") else value)
+    for attr in PRODUCT_JSON_FIELDS:
+        values.append(json.dumps(getattr(p, attr), ensure_ascii=False))
     return values
 
 
@@ -43,12 +51,15 @@ class ProductQuery:
     text: str = ""
     status: CatalogStatus | None = None
     group_id: int | None = None
+    commercial_status: CommercialStatus | None = None
+    missing_media_only: bool = False
     order_by: str = "updated_at"
     descending: bool = True
     limit: int | None = None
+    offset: int = 0
 
 
-_ORDERABLE = {"updated_at", "internal_name", "title", "sku", "price_cents", "stock", "status", "created_at"}
+_ORDERABLE = {"updated_at", "internal_name", "title", "sku", "price_cents", "stock", "status", "created_at", "brand"}
 
 
 class ProductRepository:
@@ -57,8 +68,8 @@ class ProductRepository:
 
     def insert(self, product: Product) -> int:
         now = now_iso()
-        cols = ", ".join(PRODUCT_FIELDS)
-        marks = ", ".join("?" for _ in PRODUCT_FIELDS)
+        cols = ", ".join(_PRODUCT_COLUMNS)
+        marks = ", ".join("?" for _ in _PRODUCT_COLUMNS)
         with self.db.transaction() as conn:
             try:
                 cur = conn.execute(
@@ -76,7 +87,7 @@ class ProductRepository:
         if product.id is None:
             raise ValueError("Produto sem id")
         now = now_iso()
-        assignments = ", ".join(f"{name} = ?" for name in PRODUCT_FIELDS)
+        assignments = ", ".join(f"{name} = ?" for name in _PRODUCT_COLUMNS)
         with self.db.transaction() as conn:
             try:
                 conn.execute(
@@ -109,6 +120,33 @@ class ProductRepository:
     def id_for_sku(self, sku: str) -> int | None:
         return self.db.scalar("SELECT id FROM products WHERE sku = ?", (sku,))
 
+    def variant_owner(self, sku: str) -> tuple[int, str] | None:
+        """(product id, variation name) of the variation that uses this SKU."""
+        row = self.db.query_one("SELECT product_id, name FROM product_variants WHERE sku = ?", (sku,))
+        return (row[0], row[1]) if row else None
+
+    def ids_for_gtin(self, gtin: str) -> list[int]:
+        return [r[0] for r in self.db.query("SELECT id FROM products WHERE gtin = ? AND gtin <> ''", (gtin,))]
+
+    def ids_for_skus(self, skus: list[str]) -> dict[str, int]:
+        """Lower-cased SKU -> product id, in chunks (SQLite has a parameter limit)."""
+        found: dict[str, int] = {}
+        for start in range(0, len(skus), 500):
+            chunk = skus[start:start + 500]
+            marks = ",".join("?" for _ in chunk)
+            for r in self.db.query(f"SELECT id, sku FROM products WHERE sku IN ({marks})", tuple(chunk)):
+                found[r["sku"].lower()] = r["id"]
+        return found
+
+    def products_missing(self, reference_names: set[str]) -> dict[str, list[int]]:
+        """Lower-cased missing-media file name -> product ids still waiting for it."""
+        result: dict[str, list[int]] = {}
+        for r in self.db.query("SELECT product_id, reference FROM product_missing_media"):
+            name = r["reference"].replace("\\", "/").rsplit("/", 1)[-1].lower()
+            if name in reference_names:
+                result.setdefault(name, []).append(r["product_id"])
+        return result
+
     def get(self, product_id: int) -> Product | None:
         row = self.db.query_one("SELECT * FROM products WHERE id = ?", (product_id,))
         if row is None:
@@ -117,9 +155,22 @@ class ProductRepository:
         product.images = [
             ProductImage(filename=r["filename"], position=r["position"], is_main=bool(r["is_main"]),
                          width=r["width"], height=r["height"], size_bytes=r["size_bytes"],
-                         sha256=r["sha256"], id=r["id"], product_id=product_id)
+                         sha256=r["sha256"], variant=r["variant"], original_name=r["original_name"],
+                         id=r["id"], product_id=product_id)
             for r in self.db.query(
                 "SELECT * FROM product_images WHERE product_id = ? ORDER BY position, id", (product_id,))
+        ]
+        product.files = [
+            ProductFile(filename=r["filename"], original_name=r["original_name"], size_bytes=r["size_bytes"],
+                        sha256=r["sha256"], position=r["position"], id=r["id"], product_id=product_id)
+            for r in self.db.query(
+                "SELECT * FROM product_files WHERE product_id = ? ORDER BY position, id", (product_id,))
+        ]
+        product.missing_media = [
+            MissingMedia(reference=r["reference"], kind=r["kind"], origin=r["origin"], id=r["id"],
+                         created_at=r["created_at"])
+            for r in self.db.query(
+                "SELECT * FROM product_missing_media WHERE product_id = ? ORDER BY id", (product_id,))
         ]
         product.variants = [
             ProductVariant(name=r["name"], attributes=json.loads(r["attributes_json"]), sku=r["sku"],
@@ -140,33 +191,53 @@ class ProductRepository:
             )
         return product
 
-    def list_summaries(self, query: ProductQuery | None = None) -> list[ProductSummary]:
-        q = query or ProductQuery()
+    @staticmethod
+    def _where(q: ProductQuery) -> tuple[str, list[Any]]:
         where, params = [], []
         if q.text:
             like = f"%{q.text.strip()}%"
             where.append("(p.internal_name LIKE ? OR p.title LIKE ? OR p.sku LIKE ? OR p.category LIKE ?"
-                         " OR p.brand LIKE ?)")
-            params += [like] * 5
+                         " OR p.brand LIKE ? OR p.gtin LIKE ? OR p.manufacturer_code LIKE ? OR p.supplier LIKE ?"
+                         " OR p.commercial_name LIKE ?"
+                         " OR p.id IN (SELECT product_id FROM product_variants WHERE sku LIKE ?))")
+            params += [like] * 10
         if q.status is not None:
             where.append("p.status = ?")
             params.append(CatalogStatus(q.status).value)  # Qt combos hand back plain str
         if q.group_id is not None:
             where.append("p.id IN (SELECT product_id FROM group_products WHERE group_id = ?)")
             params.append(q.group_id)
+        if q.commercial_status is not None:
+            where.append("p.commercial_status = ?")
+            params.append(CommercialStatus(q.commercial_status).value)
+        if q.missing_media_only:
+            where.append("EXISTS (SELECT 1 FROM product_missing_media m WHERE m.product_id = p.id)")
+        return (" WHERE " + " AND ".join(where) if where else ""), params
+
+    def count(self, query: ProductQuery | None = None) -> int:
+        where, params = self._where(query or ProductQuery())
+        return self.db.scalar("SELECT COUNT(*) FROM products p" + where, tuple(params)) or 0
+
+    def list_summaries(self, query: ProductQuery | None = None) -> list[ProductSummary]:
+        q = query or ProductQuery()
+        where, params = self._where(q)
         order = q.order_by if q.order_by in _ORDERABLE else "updated_at"
+        paging = ""
+        if q.limit:
+            paging = f" LIMIT {int(q.limit)} OFFSET {max(0, int(q.offset))}"
         sql = (
             "SELECT p.id, p.internal_name, p.title, p.sku, p.category, p.price_cents, p.stock, p.status,"
-            " p.updated_at,"
+            " p.updated_at, p.brand, p.gtin, p.commercial_status,"
             " (SELECT COUNT(*) FROM product_images i WHERE i.product_id = p.id) AS image_count,"
             " (SELECT filename FROM product_images i WHERE i.product_id = p.id"
             "   ORDER BY i.is_main DESC, i.position LIMIT 1) AS main_image,"
             " (SELECT group_concat(marketplace) FROM product_marketplace_data d"
-            "   WHERE d.product_id = p.id AND d.enabled = 1) AS marketplaces"
-            " FROM products p"
-            + (" WHERE " + " AND ".join(where) if where else "")
-            + f" ORDER BY p.{order} COLLATE NOCASE {'DESC' if q.descending else 'ASC'}, p.id DESC"
-            + (f" LIMIT {int(q.limit)}" if q.limit else "")
+            "   WHERE d.product_id = p.id AND d.enabled = 1) AS marketplaces,"
+            " (SELECT COUNT(*) FROM product_compatibilities c WHERE c.product_id = p.id"
+            "   AND c.verification <> 'rejected') AS compat_count,"
+            " (SELECT COUNT(*) FROM product_missing_media m WHERE m.product_id = p.id) AS missing_media"
+            " FROM products p" + where
+            + f" ORDER BY p.{order} COLLATE NOCASE {'DESC' if q.descending else 'ASC'}, p.id DESC" + paging
         )
         rows = self.db.query(sql, tuple(params))
         result = []
@@ -177,6 +248,8 @@ class ProductRepository:
                 category=r["category"], price_cents=r["price_cents"], stock=r["stock"],
                 status=CatalogStatus(r["status"]), image_count=r["image_count"],
                 main_image=r["main_image"], updated_at=r["updated_at"], marketplaces=mps,
+                brand=r["brand"], gtin=r["gtin"], commercial_status=CommercialStatus(r["commercial_status"]),
+                compat_count=r["compat_count"], missing_media=r["missing_media"],
             ))
         return result
 
@@ -191,6 +264,9 @@ class ProductRepository:
 
     def image_files_in_use(self) -> set[str]:
         return {r[0] for r in self.db.query("SELECT DISTINCT filename FROM product_images")}
+
+    def technical_files_in_use(self) -> set[str]:
+        return {r[0] for r in self.db.query("SELECT DISTINCT filename FROM product_files")}
 
     # -- helpers
     @staticmethod
@@ -208,6 +284,9 @@ class ProductRepository:
         data = {name: row[name] for name in PRODUCT_FIELDS}
         data["condition"] = Condition(data["condition"])
         data["status"] = CatalogStatus(data["status"])
+        data["commercial_status"] = CommercialStatus(data["commercial_status"])
+        for attr, column in PRODUCT_JSON_FIELDS.items():
+            data[attr] = json.loads(row[column] or "{}")
         return Product(**data, id=row["id"], created_at=row["created_at"], updated_at=row["updated_at"])
 
     def _save_children(self, conn: sqlite3.Connection, product: Product) -> None:
@@ -221,11 +300,26 @@ class ProductRepository:
                 image.is_main = True
             cur = conn.execute(
                 "INSERT INTO product_images (product_id, filename, position, is_main, width, height,"
-                " size_bytes, sha256, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " size_bytes, sha256, variant, original_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (pid, image.filename, pos, int(image.is_main), image.width, image.height,
-                 image.size_bytes, image.sha256, now),
+                 image.size_bytes, image.sha256, image.variant, image.original_name, now),
             )
             image.id, image.product_id = cur.lastrowid, pid
+        conn.execute("DELETE FROM product_files WHERE product_id = ?", (pid,))
+        for pos, item in enumerate(product.files):
+            item.position = pos
+            cur = conn.execute(
+                "INSERT INTO product_files (product_id, filename, original_name, size_bytes, sha256, position,"
+                " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (pid, item.filename, item.original_name, item.size_bytes, item.sha256, pos, now))
+            item.id, item.product_id = cur.lastrowid, pid
+        conn.execute("DELETE FROM product_missing_media WHERE product_id = ?", (pid,))
+        for missing in product.missing_media:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO product_missing_media (product_id, reference, kind, origin, created_at)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (pid, missing.reference, missing.kind, missing.origin, missing.created_at or now))
+            missing.id = cur.lastrowid
         conn.execute("DELETE FROM product_variants WHERE product_id = ?", (pid,))
         for pos, variant in enumerate(product.variants):
             variant.position = pos
@@ -306,6 +400,8 @@ class GroupRepository:
 
 # --------------------------------------------------------------------------- accounts
 class AccountRepository:
+    _FIELDS = ("label", "profile_dir", "is_active", "seller_url", "internal_id")
+
     def __init__(self, db: Database):
         self.db = db
 
@@ -313,10 +409,10 @@ class AccountRepository:
         sql, params = "SELECT * FROM marketplace_accounts WHERE 1=1", []
         if marketplace is not None:
             sql += " AND marketplace = ?"
-            params.append(marketplace.value)
+            params.append(Marketplace(marketplace).value)
         if active_only:
             sql += " AND is_active = 1"
-        rows = self.db.query(sql + " ORDER BY marketplace, id", tuple(params))
+        rows = self.db.query(sql + " ORDER BY marketplace, is_default DESC, id", tuple(params))
         return [self._row(r) for r in rows if r["marketplace"] in Marketplace._value2member_map_]
 
     def get(self, account_id: int) -> MarketplaceAccount | None:
@@ -324,6 +420,7 @@ class AccountRepository:
         return self._row(row) if row else None
 
     def default_for(self, marketplace: Marketplace) -> MarketplaceAccount | None:
+        """The active account marked as default, else the oldest active one."""
         accounts = self.list(marketplace, active_only=True)
         return accounts[0] if accounts else None
 
@@ -332,27 +429,106 @@ class AccountRepository:
             try:
                 if account.id is None:
                     cur = conn.execute(
-                        "INSERT INTO marketplace_accounts (marketplace, label, profile_dir, is_active, created_at)"
-                        " VALUES (?, ?, ?, ?, ?)",
-                        (account.marketplace.value, account.label, account.profile_dir,
-                         int(account.is_active), now_iso()))
+                        "INSERT INTO marketplace_accounts (marketplace, label, profile_dir, is_active, seller_url,"
+                        " internal_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (account.marketplace.value, account.label, account.profile_dir, int(account.is_active),
+                         account.seller_url, account.internal_id, now_iso()))
                     account.id = cur.lastrowid
+                    if not account.internal_id:
+                        account.internal_id = f"{account.marketplace.value}-{account.id}"
+                        conn.execute("UPDATE marketplace_accounts SET internal_id = ? WHERE id = ?",
+                                     (account.internal_id, account.id))
                 else:
                     conn.execute(
-                        "UPDATE marketplace_accounts SET label = ?, profile_dir = ?, is_active = ? WHERE id = ?",
-                        (account.label, account.profile_dir, int(account.is_active), account.id))
+                        "UPDATE marketplace_accounts SET label = ?, profile_dir = ?, is_active = ?, seller_url = ?,"
+                        " internal_id = ? WHERE id = ?",
+                        (account.label, account.profile_dir, int(account.is_active), account.seller_url,
+                         account.internal_id, account.id))
             except sqlite3.IntegrityError as exc:
-                raise ValueError(f"Já existe uma conta '{account.label}' neste marketplace") from exc
+                if "internal_id" in str(exc):
+                    raise ValueError(f"Já existe uma conta com o identificador '{account.internal_id}'.") from exc
+                raise ValueError(f"Já existe uma conta '{account.label}' neste marketplace.") from exc
+            if account.is_default or conn.execute(
+                    "SELECT COUNT(*) FROM marketplace_accounts WHERE marketplace = ? AND is_default = 1",
+                    (account.marketplace.value,)).fetchone()[0] == 0:
+                self._make_default(conn, account)
         return account.id  # type: ignore[return-value]
+
+    def set_default(self, account_id: int) -> None:
+        account = self.get(account_id)
+        if account is None:
+            raise ValueError("Conta não encontrada.")
+        with self.db.transaction() as conn:
+            self._make_default(conn, account)
+
+    @staticmethod
+    def _make_default(conn: sqlite3.Connection, account: MarketplaceAccount) -> None:
+        conn.execute("UPDATE marketplace_accounts SET is_default = (id = ?) WHERE marketplace = ?",
+                     (account.id, account.marketplace.value))
+        account.is_default = True
+
+    def usage_count(self, account_id: int) -> int:
+        return self.db.scalar("SELECT COUNT(*) FROM automation_job_items WHERE account_id = ?", (account_id,)) or 0
+
+    def delete(self, account_id: int) -> None:
+        """Delete an account without history. Raises ValueError if executions reference it."""
+        account = self.get(account_id)
+        if account is None:
+            return
+        if self.usage_count(account_id):
+            raise ValueError("Esta conta tem execuções no histórico; desative-a em vez de remover.")
+        with self.db.transaction() as conn:
+            conn.execute("DELETE FROM listings WHERE account_id = ?", (account_id,))
+            conn.execute("DELETE FROM marketplace_accounts WHERE id = ?", (account_id,))
+            if account.is_default:
+                row = conn.execute("SELECT id FROM marketplace_accounts WHERE marketplace = ? ORDER BY is_active DESC,"
+                                   " id LIMIT 1", (account.marketplace.value,)).fetchone()
+                if row:
+                    conn.execute("UPDATE marketplace_accounts SET is_default = 1 WHERE id = ?", (row[0],))
+
+    def record_connection(self, account_id: int, status: ConnectionStatus, message: str = "",
+                          identity: str = "") -> None:
+        now = now_iso()
+        connected = status is ConnectionStatus.CONNECTED
+        self.db.execute(
+            "UPDATE marketplace_accounts SET connection_status = ?, connection_message = ?,"
+            " connection_checked_at = ?,"
+            " detected_identity = CASE WHEN ? <> '' THEN ? ELSE detected_identity END,"
+            " last_connected_at = CASE WHEN ? THEN ? ELSE last_connected_at END WHERE id = ?",
+            (status.value, message, now, identity, identity, int(connected), now, account_id))
 
     @staticmethod
     def _row(r: sqlite3.Row) -> MarketplaceAccount:
-        return MarketplaceAccount(marketplace=Marketplace(r["marketplace"]), label=r["label"],
-                                  profile_dir=r["profile_dir"], is_active=bool(r["is_active"]),
-                                  id=r["id"], created_at=r["created_at"])
+        keys = r.keys()
+        status = r["connection_status"] if "connection_status" in keys else "unknown"
+        return MarketplaceAccount(
+            marketplace=Marketplace(r["marketplace"]), label=r["label"], profile_dir=r["profile_dir"],
+            is_active=bool(r["is_active"]), id=r["id"], created_at=r["created_at"],
+            seller_url=r["seller_url"] if "seller_url" in keys else "",
+            internal_id=r["internal_id"] if "internal_id" in keys else "",
+            is_default=bool(r["is_default"]) if "is_default" in keys else False,
+            connection_status=ConnectionStatus(status) if status in ConnectionStatus._value2member_map_
+            else ConnectionStatus.UNKNOWN,
+            connection_message=r["connection_message"] if "connection_message" in keys else "",
+            connection_checked_at=r["connection_checked_at"] if "connection_checked_at" in keys else None,
+            detected_identity=r["detected_identity"] if "detected_identity" in keys else "",
+            last_connected_at=r["last_connected_at"] if "last_connected_at" in keys else None,
+        )
 
 
 # --------------------------------------------------------------------------- automation
+def listing_from_row(r: sqlite3.Row) -> Listing:
+    return Listing(product_id=r["product_id"], marketplace=Marketplace(r["marketplace"]),
+                   account_id=r["account_id"], status=ListingStatus(r["status"]),
+                   external_id=r["external_id"], url=r["url"], published_at=r["published_at"],
+                   last_item_id=r["last_item_id"], id=r["id"], updated_at=r["updated_at"],
+                   title=r["title"], description=r["description"], price_cents=r["price_cents"], stock=r["stock"],
+                   category_id=r["category_id"], listing_type=r["listing_type"],
+                   attributes=json.loads(r["attributes_json"] or "{}"), image_files=json.loads(r["images_json"] or "[]"),
+                   notes=r["notes"], approved_at=r["approved_at"], approved_hash=r["approved_hash"],
+                   created_at=r["created_at"])
+
+
 _ITEM_SELECT = (
     "SELECT it.*, COALESCE(p.internal_name, it.product_name) AS display_name,"
     " COALESCE(p.sku, it.sku) AS display_sku, a.label AS account_label"
@@ -471,7 +647,7 @@ class AutomationRepository:
         now = now_iso()
         self.db.execute(
             "INSERT INTO listings (product_id, marketplace, account_id, status, external_id, url, published_at,"
-            " last_item_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            " last_item_id, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             " ON CONFLICT (product_id, marketplace, account_id) DO UPDATE SET status = excluded.status,"
             " external_id = CASE WHEN excluded.external_id <> '' THEN excluded.external_id ELSE listings.external_id END,"
             " url = CASE WHEN excluded.url <> '' THEN excluded.url ELSE listings.url END,"
@@ -479,7 +655,7 @@ class AutomationRepository:
             " last_item_id = COALESCE(excluded.last_item_id, listings.last_item_id),"
             " updated_at = excluded.updated_at",
             (listing.product_id, listing.marketplace.value, listing.account_id, listing.status.value,
-             listing.external_id, listing.url, listing.published_at, listing.last_item_id, now))
+             listing.external_id, listing.url, listing.published_at, listing.last_item_id, now, now))
 
     def get_listing(self, product_id: int, marketplace: Marketplace, account_id: int) -> Listing | None:
         row = self.db.query_one(
@@ -539,10 +715,7 @@ class AutomationRepository:
 
     @staticmethod
     def _listing(r: sqlite3.Row) -> Listing:
-        return Listing(product_id=r["product_id"], marketplace=Marketplace(r["marketplace"]),
-                       account_id=r["account_id"], status=ListingStatus(r["status"]),
-                       external_id=r["external_id"], url=r["url"], published_at=r["published_at"],
-                       last_item_id=r["last_item_id"], id=r["id"], updated_at=r["updated_at"])
+        return listing_from_row(r)
 
     @staticmethod
     def _log(r: sqlite3.Row) -> ExecutionLog:

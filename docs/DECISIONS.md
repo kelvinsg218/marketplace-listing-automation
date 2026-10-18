@@ -45,3 +45,29 @@ signals through `ExecutionBridge`. Pause takes effect after the current item. Ma
 
 **D-012 (2026-10-12) Distribution:** PyInstaller one-folder build (219 MB), Playwright driver collected via
 `collect_data_files("playwright")` (no contrib hook exists). `MLA.exe --self-test` validated DB + resources + Edge.
+
+**D-013 (2026-10-18) Import formats: openpyxl 3.1.5 (XLSX, read-only, macros never loaded) and pypdf 6.1.3
+(PDF text, layout mode)**, both pure Python. CSV/JSON/XML use the standard library; XML with DOCTYPE/ENTITY is
+refused. No OCR (scanned PDFs are refused with a clear message). Rejected: pandas (heavy for an 8 GB laptop),
+pdfplumber (pulls pdfminer + pypdfium2 + Pillow).
+
+**D-014 (2026-10-18) Import pipeline = analyze → plan → decide → commit.** The plan (per-row action, field changes
+old→new, issues, media) is stored in `import_rows`, so previews are paged from SQLite and survive restarts.
+Updates only touch fields the file fills and that differ; a field edited after the analysis is kept. Media are
+copied before the transaction (content-addressed) and only ever added. Commit = one transaction with a SAVEPOINT
+per row (row errors isolated, cancel/crash = nothing written). ZIPs are extracted to `imports/` with an
+allow-list (tables, images, documents); executables, scripts, macro documents, nested archives, links and
+escaping paths are skipped. Column recognition is a synonym dictionary (no AI); ambiguous names need confirmation.
+
+**D-015 (2026-10-18) Listing = offer of a master product on one account.** Stored in `listings` (rebuilt in
+migration 0006 to widen the status CHECK; all rows copied) with overrides only (empty = master value). One status
+column holds the lifecycle; preparation states are derived from validating the effective content; approval keeps a
+fingerprint and is revoked when the content changes. Only approved listings are queued; the executor validates and
+sends the effective content; PUBLISHED still only comes from a confirmed publication. UNIQUE(product, marketplace,
+account) kept (two offers of one product in the same account not supported yet).
+
+**D-016 (2026-10-18) Provenance.** Compatibilities carry source (client/manufacturer/external) and verification;
+client data starts confirmed, everything else unverified; nothing is inferred. External observations
+(`market_observations`) and AI suggestions (`ai_suggestions`) live in their own tables; suggestions only change a
+listing override when accepted, never the master product. External AI providers need the setting
+`ai.external_providers_allowed` (default off). Collectors must declare `terms_reviewed`; none ships.

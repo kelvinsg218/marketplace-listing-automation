@@ -65,6 +65,7 @@ def seed(ctx, workdir: Path) -> None:
     ctx.catalog.save(Product(internal_name="Kit chaveiros personalizados", sku="KIT-CHAV-10",
                              title="Kit 10 chaveiros", price_cents=3500))
     ctx.catalog.save(Product(internal_name="Capa de notebook (rascunho)", sku="CAPA-NB-15"))
+    seed_master(ctx, workdir, ids)
     ctx.groups.save(ProductGroup(name="Produtos 3D", product_ids=[ids[3], ids[1]],
                                  marketplaces=[Marketplace.SIMULATED]))
     ctx.groups.save(ProductGroup(name="Escritório", product_ids=[ids[0], ids[2], ids[4], ids[5]],
@@ -79,6 +80,44 @@ def seed(ctx, workdir: Path) -> None:
         ctx.automation_repo.update_item(item.id, started_at="2026-10-12T14:02:10", step="done" if ext else "images")
         queue.finish_item(item, status, error, ext, f"file:///listing.html?id={ext}" if ext else "")
     time.sleep(0.01)
+
+
+def seed_master(ctx, workdir: Path, ids: list[int]) -> None:
+    """Master catalog sample: extra fields, compatibilities, prepared listings and two imports."""
+    from mla.core.enums import DataSource, Marketplace, Verification
+    from mla.core.models import Compatibility, MissingMedia
+    from mla.importing.service import ImportOptions
+
+    first = ctx.catalog.get(ids[0])
+    first.gtin, first.supplier, first.cost_cents, first.manufacturer_code = "7891234567895", "Distribuidora Sul", 11000, "ON-SM27"
+    first.specs = {"Carga máxima": "9 kg", "Compatível VESA": "75 e 100"}
+    first.technical_description = "Braço em aço carbono com mola a gás; giro de 360°."
+    first.missing_media.append(MissingMedia("fotos/SUP-MON-27_3.jpg", origin="Importação #1"))
+    ctx.catalog.save(first)
+    for model, brand, years, source in (("Dell P2422H", "Dell", (2021, 2024), DataSource.CLIENT),
+                                        ("LG 27UL500", "LG", (2019, None), DataSource.MANUFACTURER),
+                                        ("Samsung Odyssey G5", "Samsung", (None, None), DataSource.EXTERNAL)):
+        ctx.compatibility.save(Compatibility(ids[0], model, brand=brand, year_from=years[0], year_to=years[1],
+                                             source=source, source_detail="Tabela do fornecedor"
+                                             if source is DataSource.CLIENT else "Site do fabricante",
+                                             verification=Verification.CONFIRMED if source is DataSource.CLIENT
+                                             else Verification.UNVERIFIED))
+    account = ctx.accounts.default_for(Marketplace.MERCADO_LIVRE)
+    ml = ctx.listings.prepare(ids + [ctx.products.id_for_sku("CAPA-NB-15")], Marketplace.MERCADO_LIVRE,
+                              account.id)
+    ctx.listings.approve(ml.created[:2])
+    csv = workdir / "base-cliente.csv"
+    csv.write_text("codigo;descricao;preco_venda;saldo;marca;ean;foto\n"
+                   "HZ-1001;Filtro de óleo;29,90;10;Horizonte;7891234567895;\n"
+                   "HZ-1002;Pastilha de freio;119,00;4;Horizonte;;sumida.jpg\n"
+                   "HZ-1003;Vela de ignição;abc;0;Horizonte;;\n", encoding="utf-8")
+    analysis = ctx.imports.analyze(csv)
+    batch = ctx.imports.plan(analysis, analysis.mapping(), ImportOptions())
+    ctx.imports.commit(batch.id)
+    second = workdir / "atualizacao-precos.csv"
+    second.write_text("sku;preco;estoque\nHZ-1001;31,50;12\nHZ-1002;119,00;4\nNOVO-1;10,00;1\n", encoding="utf-8")
+    analysis = ctx.imports.analyze(second)
+    ctx.imports.plan(analysis, analysis.mapping(), ImportOptions())
 
 
 def main() -> int:
@@ -116,15 +155,49 @@ def main() -> int:
         settle()
         window.grab().save(str(out / f"{key}{suffix}.png"))
     if not empty:
+        from mla.core.enums import ImportStatus
+        from mla.ui.pages.imports import ImportWizard
+        from mla.ui.pages.listings import ListingEditor
+        from mla.ui.pages.marketplaces import AccountDialog
         from mla.ui.pages.product_editor import ProductEditor
         product = ctx.catalog.get(ctx.products.id_for_sku("SUP-MON-27"))
-        for tab in (0, 2):
+        for tab in (0, 2, 3, 4, 6):
             editor = ProductEditor(ctx, product, window)
             editor.tabs.setCurrentIndex(tab)
             editor.show()
             settle(500)
             editor.grab().save(str(out / f"editor-tab{tab}.png"))
             editor.close()
+        planned = next(b for b in ctx.imports.history() if b.status is ImportStatus.PLANNED)
+        wizard = ImportWizard(ctx, window, batch_id=planned.id)
+        wizard.show()
+        settle(600)
+        wizard.grab().save(str(out / "import-review.png"))
+        wizard.close()
+        wizard = ImportWizard(ctx, window, path=data / "base-cliente.csv")
+        wizard.show()
+        settle(600)
+        wizard._next()
+        wizard._next()
+        settle(400)
+        wizard.grab().save(str(out / "import-mapping.png"))
+        wizard.reject()
+        listing = ctx.listings.rows(limit=1)[0].listing
+        editor = ListingEditor(ctx, ctx.listings.get(listing.id), window)
+        editor.show()
+        settle(500)
+        editor.grab().save(str(out / "listing-editor.png"))
+        editor.close()
+        dialog = AccountDialog(ctx, parent=window)
+        dialog.show()
+        settle(300)
+        dialog.grab().save(str(out / "account-dialog.png"))
+        dialog.close()
+        window.resize(1100, 700)  # smallest supported window (notebooks)
+        for key in ("products", "listings", "imports"):
+            window.navigate(key)
+            settle(500)
+            window.grab().save(str(out / f"{key}-small.png"))
     window.services.executor.stop(timeout=1)
     ctx.close()
     print(f"capturas em {out}")

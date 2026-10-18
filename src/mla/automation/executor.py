@@ -182,12 +182,14 @@ class ExecutionManager:
             product = self.ctx.products.get(item.product_id) if item.product_id else None
             if product is None:
                 raise StepError("O produto foi excluído do catálogo.", retryable=False)
-            errors = validate_product(product).errors(item.marketplace)
+            listing = repo.get_listing(item.product_id, item.marketplace, item.account_id)
+            # the offer's effective content (master + this account's overrides) is what gets validated and sent
+            report = self.ctx.listings.validate(listing, product) if listing else validate_product(product)
+            errors = report.errors(item.marketplace)
             if errors:
                 raise StepError("Cadastro incompleto: " + "; ".join(e.message for e in errors), retryable=False)
 
             self._step(item, logger, "duplicates")
-            listing = repo.get_listing(item.product_id, item.marketplace, item.account_id)
             if listing and listing.status is ListingStatus.PUBLISHED:
                 self._finish(item, ItemStatus.SKIPPED, f"Já publicado nesta conta ({listing.external_id}).", logger)
                 return
@@ -201,7 +203,7 @@ class ExecutionManager:
             if account is None or not account.is_active:
                 raise StepError("A conta do marketplace não existe mais ou está desativada.", retryable=False)
             session = self._browser.open(account)
-            payload = build_payload(product, item.marketplace, self.ctx.images)
+            payload = build_payload(product, item.marketplace, self.ctx.images, listing)
             timeout_ms = int(self._settings("automation.step_timeout_s")) * 1000
             adapter = adapter_cls(session.page, payload, logger, timeout_ms)
             logger.info(f"Navegador aberto com o perfil da conta {account.label}.")
@@ -220,7 +222,7 @@ class ExecutionManager:
             for mismatch in mismatches:
                 logger.warning(f"Divergência no formulário: {mismatch}")
             shot = logger.screenshot(adapter.page, "revisao", message="Formulário preenchido; aguardando revisão.")
-            warnings = [i.message for i in validate_product(product).warnings(item.marketplace)]
+            warnings = [i.message for i in report.warnings(item.marketplace)]
             self._step(item, logger, "await_approval")
             repo.update_item(item.id, status=ItemStatus.AWAITING_REVIEW)
             item.status = ItemStatus.AWAITING_REVIEW
