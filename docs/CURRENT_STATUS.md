@@ -19,6 +19,13 @@ Migration v2→v7 checked on a copy of the owner's real DB: accounts/settings ke
 | Market intelligence / AI | Groundwork only: reference URLs + dated observations, collector contract gated by `terms_reviewed`, deterministic completeness score (shown in the listing editor), AI suggestion storage applied only when accepted, external providers blocked unless `ai.external_providers_allowed` |
 | Distribution | `mla.spec` not re-validated with openpyxl/pypdf; rebuild + `--self-test` pending |
 
+## Visual demo — 2026-10-19
+Full scripted demo of the real app with fictitious data (`demo/run_demo.py`, isolated data folder): 78 checks
+passed, 2 failed, 2 not executed. Details, bugs and screenshots list: [DEMO_TEST_REPORT.md](DEMO_TEST_REPORT.md).
+Bugs found: History "Reexecutar" refuses listings prepared in Anúncios; editor price field silently drops letters.
+Visual: Dashboard "Atividade recente" overlaps with 8 items at 1366×768; import "Concluído" step layout.
+Security: automation Edge runs with Playwright's default `--no-sandbox`.
+
 ## Known limitations (honest)
 - Marketplace limits in `MARKETPLACE_RULES` still unconfirmed (D-009); ML/Shopee adapters still refuse to run.
 - XLSX pictures embedded in cells are not extracted; image URLs in a base are recorded as pending, not downloaded.

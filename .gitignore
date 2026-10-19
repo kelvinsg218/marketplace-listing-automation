@@ -37,3 +37,11 @@ snapshots/
 *.key
 *.pfx
 credentials*.json
+
+# demonstration outputs (never committed: recordings, generated data, screenshots)
+demo/recordings/
+demo/demo-data/
+demo/output/
+demo/fixtures/
+demo/screenshots/
+demo/*.pid

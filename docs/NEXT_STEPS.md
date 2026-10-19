@@ -6,6 +6,12 @@
 2. Collect feedback; triage bugs / visual / UX; fix with tests and `tools/ui_snapshots.py`.
 3. Phase 9 committed (371e0f8). Keep asking before each commit; no Co-Authored-By trailer.
 
+## Fixes from the 2026-10-19 demo (docs/DEMO_TEST_REPORT.md)
+1. Enable the Edge sandbox (`chromium_sandbox=True`) for the dedicated profiles.
+2. History "Reexecutar" must requeue the listing (listing flow) when one exists.
+3. Strict money validation in the product editor (as the importer already does).
+4. Dashboard "Atividade recente" layout at 1366×768; import "Concluído" step layout and wording.
+
 ## Blocked on the owner
 - **Mercado Livre real inspection** (brief phase 7): owner registers the seller URL in Marketplaces, authorizes,
   logs in by hand in the dedicated Edge window; then map (read-only) the session check page, identity element and
