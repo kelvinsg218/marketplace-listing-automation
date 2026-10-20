@@ -13,9 +13,9 @@ from pathlib import Path
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter
 from PySide6.QtWidgets import (
-    QAbstractItemView, QApplication, QComboBox, QDialog, QFileDialog, QHBoxLayout, QHeaderView, QLineEdit, QListWidget, QListWidgetItem,
-    QPlainTextEdit, QStackedLayout, QStyledItemDelegate, QTableView, QTableWidget, QTableWidgetItem, QVBoxLayout,
-    QWidget,
+    QAbstractItemView, QApplication, QComboBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLineEdit,
+    QListWidget, QListWidgetItem, QPlainTextEdit, QScrollArea, QStackedLayout, QStyledItemDelegate, QTableView,
+    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from mla.automation.adapters import adapter_for
@@ -250,8 +250,14 @@ class ListingEditor(QDialog):
         side.addStretch(1)
         holder = QWidget()
         holder.setLayout(side)
-        holder.setFixedWidth(330)
-        body.addWidget(holder)
+        # the side column scrolls on notebook screens (768 px) so check results are never squeezed
+        side_scroll = QScrollArea()
+        side_scroll.setWidgetResizable(True)
+        side_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        side_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        side_scroll.setWidget(holder)
+        side_scroll.setFixedWidth(346)
+        body.addWidget(side_scroll)
         outer.addLayout(body, 1)
 
         foot = QHBoxLayout()
