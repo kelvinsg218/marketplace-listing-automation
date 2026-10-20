@@ -1,29 +1,28 @@
-MLA - Marketplace Listing Automation (Windows)
-==============================================
+MLA - Marketplace Listing Automation (Windows, versão beta)
+==========================================================
 
 Requisitos
-- Windows 10 ou 11 (64 bits), 4 GB de RAM (8 GB recomendados), 1 GB livre em disco + espaço para as imagens.
-- Microsoft Edge instalado (vem com o Windows). A automação usa o Edge do sistema.
+- Windows 10 ou 11 (64 bits), 4 GB de RAM (8 GB recomendados), 1 GB livre em disco + espaço para as fotos.
+- Microsoft Edge (já vem no Windows).
 
-Instalar ou atualizar
-1. Extraia este .zip numa pasta (por exemplo, Downloads\MLA-instalacao).
-2. Dê dois cliques em instalar.cmd. Não precisa de administrador.
-   Opções: instalar.cmd -AtalhoNaAreaDeTrabalho   (cria atalho na área de trabalho)
-           instalar.cmd -Verificar                (roda o autoteste numa pasta temporária)
-3. Abra o MLA pelo menu Iniciar.
+Instalar
+- Dê dois cliques em MLA-Setup-<versão>.exe. Não precisa ser administrador.
+- Programa: %LOCALAPPDATA%\Programs\MLA     Dados: %LOCALAPPDATA%\MLA (nunca apagados pelo instalador)
 
-O programa fica em %LOCALAPPDATA%\Programs\MLA. Os dados ficam em %LOCALAPPDATA%\MLA e NÃO são apagados ao
-atualizar: para atualizar, instale a versão nova por cima (feche o MLA antes). Antes de migrar o banco para uma
-versão nova, o MLA faz um backup automático em %LOCALAPPDATA%\MLA\backups.
+Atualizar
+- No MLA: Atualizações -> Verificar agora -> Baixar e instalar. O arquivo baixado é conferido (SHA-256), o MLA
+  fecha, a nova versão é instalada e o MLA abre de novo. Antes de atualizar o banco, o MLA faz um backup.
+- Ou execute o instalador da versão nova por cima (feche o MLA antes).
 
 Desinstalar
-- Configurações > Aplicativos instalados > "MLA - Marketplace Listing Automation" > Desinstalar,
-  ou desinstalar.cmd na pasta do programa. Os dados são mantidos.
-- Para apagar também os dados (catálogo, imagens, contas, sessões e backups):
+- Configurações do Windows -> Aplicativos instalados -> "MLA - Marketplace Listing Automation" -> Desinstalar.
+  Os dados são mantidos. Para apagar também os dados (irreversível), na pasta do programa:
   desinstalar.cmd -RemoverDados -ConfirmarRemocaoDeDados
 
 Aviso do Windows (SmartScreen)
 Esta versão não tem assinatura digital de código. O Windows pode mostrar "O Windows protegeu o computador".
-Confira a origem do arquivo e o código SHA-256 que acompanha o pacote antes de continuar.
+Confira o código SHA-256 enviado junto com o instalador antes de escolher "Executar assim mesmo".
 
-Os scripts instalar.ps1 e desinstalar.ps1 são texto: podem ser lidos antes da execução.
+Diagnóstico
+- Logs: %LOCALAPPDATA%\MLA\logs (mla.log, instalador.log). Não contêm senhas nem códigos de acesso.
+- Autoteste: "%LOCALAPPDATA%\Programs\MLA\MLA.exe" --self-test

@@ -5,15 +5,15 @@ e envie de volta junto com a pasta `%LOCALAPPDATA%\MLA\logs` compactada (os logs
 
 ## Antes de começar
 - Windows 10 ou 11 (64 bits), com Microsoft Edge.
-- Receba **dois arquivos**: `MLA-Setup-0.1.0-beta.exe` e `MLA-Setup-0.1.0-beta.exe.sha256`.
+- Receba **dois arquivos**: `MLA-Setup-0.1.1-beta.exe` e `MLA-Setup-0.1.1-beta.exe.sha256`.
 - Confira o arquivo no PowerShell (Iniciar → digite PowerShell):
   ```
-  Get-FileHash "$env:USERPROFILE\Downloads\MLA-Setup-0.1.0-beta.exe" -Algorithm SHA256
+  Get-FileHash "$env:USERPROFILE\Downloads\MLA-Setup-0.1.1-beta.exe" -Algorithm SHA256
   ```
   O código mostrado deve ser igual ao que está dentro do `.sha256`. Se for diferente, **não instale**.
 
 ## Passos
-1. **Instalar:** dê dois cliques no `MLA-Setup-0.1.0-beta.exe`. Se aparecer "O Windows protegeu o computador",
+1. **Instalar:** dê dois cliques no `MLA-Setup-0.1.1-beta.exe`. Se aparecer "O Windows protegeu o computador",
    clique em **Mais informações → Executar assim mesmo** (o instalador ainda não tem assinatura digital).
    Marque "Criar atalho na área de trabalho" se quiser e clique em **Instalar**. Não precisa ser administrador.
 2. **Primeira abertura:** o MLA abre sozinho no fim. Anote se abriu e quanto tempo levou.
@@ -26,11 +26,13 @@ e envie de volta junto com a pasta `%LOCALAPPDATA%\MLA\logs` compactada (os logs
    quantas foram recusadas (e os motivos).
 6. **Fotos:** Importações → **Associar imagens de uma pasta** → pasta com fotos nomeadas pelo SKU.
 7. **Fechar e abrir de novo:** feche o MLA e abra pelo menu Iniciar. Os produtos devem continuar lá.
-8. **Conta do Mercado Livre:** Marketplaces → **Adicionar conta** → Mercado Livre, um nome e a URL da sua conta de
-   vendedor → **Abrir navegador** → faça login você mesmo na janela do Edge que abrir. O MLA nunca pede sua senha.
-   **Testar conexão** deve responder "Não verificada" nesta versão (veja Limitações).
+8. **Conta do Mercado Livre:** siga o [guia de conexão](GUIA_MERCADO_LIVRE.md): crie o seu aplicativo gratuito
+   no portal de desenvolvedores do Mercado Livre, depois Marketplaces → conta do Mercado Livre → **API oficial**.
+   Anote se apareceu "API oficial: conectada como …". O MLA nunca pede a sua senha. Opcional: Mais → **Importar
+   anúncios desta conta para o catálogo** (só lê; nada muda no Mercado Livre).
 9. **Anúncios:** Catálogo → selecione produtos prontos → **Preparar anúncios** → Mercado Livre e a sua conta.
-   Em Anúncios, abra um anúncio, revise e clique em **Aprovar**. Depois **Exportar planilha** e abra o Excel gerado.
+   Em Anúncios, abra um anúncio: **Sugerir categoria**, **Atributos** e **Validar no Mercado Livre (sem
+   publicar)**. Anote a resposta do validador. Depois **Aprovar**, **Exportar planilha** e abra o Excel gerado.
 10. **Automação de teste:** Marketplaces → conta do **Marketplace simulado** → prepare e aprove um anúncio nela →
     **Enviar aprovados para a fila** → em Automações, revise e clique em **Aprovar e publicar**. Nada vai para o
     Mercado Livre: é o marketplace de treino que vem com o app.
@@ -39,8 +41,9 @@ e envie de volta junto com a pasta `%LOCALAPPDATA%\MLA\logs` compactada (os logs
     dados ficam guardados em `%LOCALAPPDATA%\MLA`.
 
 ## Limitações desta beta
-- O MLA **não publica nem preenche anúncios no Mercado Livre real** ainda; ele prepara, revisa e exporta.
-- "Testar conexão" do Mercado Livre não confirma a sessão (aparece "Não verificada").
+- O MLA **não publica anúncios no Mercado Livre** ainda: ele conecta pela API oficial, importa, prepara, valida
+  sem publicar e exporta. A publicação será liberada só com autorização, em teste supervisionado.
+- "Testar conexão" (navegador) do Mercado Livre não confirma a sessão; use a API oficial.
 - Sem assinatura digital (aviso do SmartScreen).
 
 ## Resultado
@@ -53,8 +56,8 @@ e envie de volta junto com a pasta `%LOCALAPPDATA%\MLA\logs` compactada (os logs
 | 5 Importação (aceitas / recusadas) | | |
 | 6 Fotos | | |
 | 7 Reabrir e dados mantidos | | |
-| 8 Conta Mercado Livre | | |
-| 9 Anúncios e planilha | | |
+| 8 Conta Mercado Livre (API oficial) | | |
+| 9 Anúncios, validação e planilha | | |
 | 10 Automação simulada | | |
 | 11 Atualizações | | |
 | 12 Desinstalar | | |

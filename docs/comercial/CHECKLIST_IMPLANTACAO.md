@@ -1,8 +1,9 @@
 # Checklist de implantação de um piloto supervisionado
 
 ## Antes (sem o cliente)
-- [ ] Instalar o pacote num **computador limpo** (sem Python) e rodar `instalar.cmd -Verificar`. Registrar o
-      resultado: a instalação em máquina limpa ainda não foi comprovada.
+- [ ] Instalar o `MLA-Setup-<versão>.exe` num **computador limpo** (sem Python) e seguir o
+      [roteiro do segundo computador](../ROTEIRO_TESTE_SEGUNDO_COMPUTADOR.md): a instalação em máquina limpa
+      ainda não foi comprovada.
 - [ ] Conferir o SHA-256 do pacote enviado ao cliente.
 - [ ] Rodar a demonstração de 5 minutos com dados fictícios na máquina que será usada.
 - [ ] Combinar por escrito: dados ficam no computador do cliente; o MLA não publica nada sozinho; publicação real

@@ -109,9 +109,10 @@ def main() -> int:
     setup = build_setup(version)
     digest = hashlib.sha256(setup.read_bytes()).hexdigest()
     Path(str(setup) + ".sha256").write_text(f"{digest}  {setup.name}\n", encoding="utf-8")
-    notes = DIST / f"release-notes-{version}.md"
-    if not notes.exists():
-        notes.write_text(f"# MLA {version}\n\nInstalador: `{setup.name}` (SHA-256 `{digest}`).\n", encoding="utf-8")
+    source = ROOT / "installer" / "release-notes" / f"{version}.md"
+    body = source.read_text(encoding="utf-8") if source.exists() else f"# MLA {version}\n"
+    (DIST / f"release-notes-{version}.md").write_text(
+        body.rstrip() + f"\n\nInstalador: `{setup.name}` · SHA-256 `{digest}`\n", encoding="utf-8")
     print(f"Instalador construído em {time.perf_counter() - start:.0f} s")
     print(f"Instalador: {setup} ({setup.stat().st_size / 1024 ** 2:.0f} MB)")
     print(f"SHA-256: {digest}")

@@ -8,12 +8,13 @@ Apresentação visual (capturas de tela e página para portfólio): repositório
 [marketplace-listing-automation-showcase](https://github.com/kelvinsg218/marketplace-listing-automation-showcase).
 
 ## Status
-v0.2.0 (MVP para piloto supervisionado). Tudo o que está em “O que já funciona” é coberto por testes automatizados
-(230: unidade, interface e ponta a ponta no Edge com o marketplace simulado) e foi exercitado num cenário de 300
-produtos fictícios com métricas medidas ([docs/DEMO_COMERCIAL.md](docs/DEMO_COMERCIAL.md)). A **publicação real no
-Mercado Livre e na Shopee não está verificada**; hoje o MLA entrega uma planilha de anúncios conferida e o fluxo
-completo de publicação roda no marketplace simulado. Pacote comercial em [docs/comercial/](docs/comercial/README.md);
-detalhes técnicos em [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md).
+v0.1.1-beta: aplicativo Windows instalável (`MLA-Setup-<versão>.exe`, por usuário) com atualização pelo próprio
+app e conexão ao **Mercado Livre pela API oficial** (importar anúncios, sugerir categoria, conferir atributos e
+validar sem publicar). 256 testes automatizados aprovados (unidade, interface e ponta a ponta no Edge com o
+marketplace simulado) e um cenário de 300 produtos fictícios medido ([docs/DEMO_COMERCIAL.md](docs/DEMO_COMERCIAL.md)).
+A **publicação real no Mercado Livre está desligada** e não foi testada com conta real; Shopee sem integração.
+Instalação e atualizações: [docs/BUILD_E_DISTRIBUICAO.md](docs/BUILD_E_DISTRIBUICAO.md); Mercado Livre:
+[docs/GUIA_MERCADO_LIVRE.md](docs/GUIA_MERCADO_LIVRE.md); estado detalhado: [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md).
 
 ## O que já funciona
 - **Empresas (clientes):** uma pasta de dados isolada por empresa (catálogo, imagens, contas, sessões, backups,
