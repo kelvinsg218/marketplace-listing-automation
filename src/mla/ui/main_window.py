@@ -31,6 +31,7 @@ from mla.ui.pages.listings import ListingsPage
 from mla.ui.pages.marketplaces import MarketplacesPage
 from mla.ui.pages.products import ProductsPage
 from mla.ui.pages.settings import SettingsPage
+from mla.ui.pages.updates import UpdatesPage
 from mla.ui.theme import T
 from mla.ui.widgets.common import confirm, inform, label, show_toast
 
@@ -47,6 +48,7 @@ NAV = [
     ("history", "Histórico", "history"),
     ("marketplaces", "Marketplaces", "store"),
     ("settings", "Configurações", "settings"),
+    ("updates", "Atualizações", "refresh-cw"),
     ("license", "Licença", "key-round"),
 ]
 
@@ -104,6 +106,7 @@ class MainWindow(QMainWindow):
             "history": HistoryPage(ctx, nav),
             "marketplaces": MarketplacesPage(ctx, nav),
             "settings": SettingsPage(ctx, nav, on_restore=self._after_restore),
+            "updates": UpdatesPage(ctx, nav),
             "license": LicensePage(ctx, nav, on_change=self._update_footer),
         }
         for page in self.pages.values():

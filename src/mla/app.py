@@ -106,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     if sys.platform == "win32":
         try:
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(f"MLA.{__version__}")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("MLA.Desktop")  # stable: pinned icons survive updates
         except (AttributeError, OSError):
             pass
 

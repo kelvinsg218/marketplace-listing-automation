@@ -1,16 +1,19 @@
-"""Build the Windows release package (development machine only).
+"""Build the Windows release (development machine only).
 
-1. PyInstaller one-folder build (mla.spec) -> dist/MLA/MLA.exe
+1. PyInstaller one-folder build of the app (mla.spec) -> dist/MLA/MLA.exe
 2. MLA.exe --self-test in a throwaway data folder (the developer's data is never opened)
-3. dist/release/MLA-<versão>/ = MLA/ + instalar/desinstalar scripts + LEIA-ME.txt + VERSAO.txt
-4. dist/MLA-<versão>-windows.zip + .sha256.txt
+3. Payload zip = program files + desinstalar.ps1/.cmd + LEIA-ME.txt
+4. PyInstaller one-file installer (installer/setup.spec) -> dist/MLA-Setup-<versão>.exe
+5. dist/MLA-Setup-<versão>.exe.sha256 (used by the in-app updater) + dist/release-notes-<versão>.md
 
-Usage: .venv/Scripts/python tools/build_release.py [--skip-build]
+Usage: .venv/Scripts/python tools/build_release.py [--skip-build] [--version 0.1.1-beta]
+--version overrides the version for this build only (used to test updates between versions).
 """
 from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -21,18 +24,25 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
-sys.path.insert(0, str(ROOT / "src"))
-from mla import __version__  # noqa: E402
+PAYLOAD = ROOT / "build" / "setup-payload"
+INIT = ROOT / "src" / "mla" / "__init__.py"
+EXTRA_FILES = ["desinstalar.ps1", "desinstalar.cmd", "LEIA-ME.txt"]
 
-INSTALLER_FILES = ["instalar.ps1", "instalar.cmd", "desinstalar.ps1", "desinstalar.cmd", "LEIA-ME.txt"]
+
+def current_version() -> str:
+    return re.search(r'__version__ = "([^"]+)"', INIT.read_text(encoding="utf-8")).group(1)
 
 
-def run_build() -> float:
+def run(cmd: list[str]) -> None:
+    subprocess.run(cmd, cwd=ROOT, check=True)
+
+
+def build_app() -> float:
     start = time.perf_counter()
-    for folder in (ROOT / "build", DIST / "MLA"):
+    for folder in (ROOT / "build" / "mla", DIST / "MLA"):
         if folder.exists():
             shutil.rmtree(folder)
-    subprocess.run([sys.executable, "-m", "PyInstaller", "mla.spec", "--noconfirm"], cwd=ROOT, check=True)
+    run([sys.executable, "-m", "PyInstaller", "mla.spec", "--noconfirm"])
     return time.perf_counter() - start
 
 
@@ -45,43 +55,65 @@ def self_test(exe: Path) -> tuple[int, str]:
     return code, text
 
 
-def folder_size(path: Path) -> int:
-    return sum(p.stat().st_size for p in path.rglob("*") if p.is_file())
+def build_payload(version: str) -> Path:
+    if PAYLOAD.exists():
+        shutil.rmtree(PAYLOAD)
+    PAYLOAD.mkdir(parents=True)
+    archive = PAYLOAD / "MLA.zip"
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+        app = DIST / "MLA"
+        for path in sorted(app.rglob("*")):
+            if path.is_file():
+                zf.write(path, path.relative_to(app).as_posix())
+        for name in EXTRA_FILES:
+            zf.write(ROOT / "installer" / name, name)
+    (PAYLOAD / "VERSAO.txt").write_text(version + "\n", encoding="utf-8")
+    shutil.copy2(ROOT / "src" / "mla" / "resources" / "app.ico", PAYLOAD / "app.ico")
+    return archive
+
+
+def build_setup(version: str) -> Path:
+    run([sys.executable, "-m", "PyInstaller", str(ROOT / "installer" / "setup.spec"), "--noconfirm",
+         "--distpath", str(DIST), "--workpath", str(ROOT / "build" / "setup")])
+    setup = DIST / f"MLA-Setup-{version}.exe"
+    if not setup.exists():
+        raise SystemExit(f"{setup} não foi gerado.")
+    return setup
 
 
 def main() -> int:
-    if "--skip-build" not in sys.argv:
-        print(f"Construindo MLA {__version__} com PyInstaller…", flush=True)
-        print(f"Build concluído em {run_build():.0f} s", flush=True)
+    version = current_version()
+    if "--version" in sys.argv:
+        version = sys.argv[sys.argv.index("--version") + 1]
+    original = INIT.read_text(encoding="utf-8")
+    try:
+        if version != current_version():
+            INIT.write_text(re.sub(r'__version__ = "[^"]+"', f'__version__ = "{version}"', original),
+                            encoding="utf-8")
+        if "--skip-build" not in sys.argv:
+            print(f"Construindo MLA {version}…", flush=True)
+            print(f"Programa construído em {build_app():.0f} s", flush=True)
+    finally:
+        INIT.write_text(original, encoding="utf-8")  # a --version build never changes the source tree
     exe = DIST / "MLA" / "MLA.exe"
-    if not exe.exists():
-        print("dist/MLA/MLA.exe não existe.")
-        return 1
     code, report = self_test(exe)
     print(report)
     if code != 0:
-        print(f"Autoteste do executável falhou (código {code}); pacote não gerado.")
-        return code
-    name = f"MLA-{__version__}"
-    stage = DIST / "release" / name
-    if stage.exists():
-        shutil.rmtree(stage)
-    stage.mkdir(parents=True)
-    shutil.copytree(DIST / "MLA", stage / "MLA")
-    for file in INSTALLER_FILES:
-        shutil.copy2(ROOT / "installer" / file, stage / file)
-    (stage / "VERSAO.txt").write_text(__version__ + "\n", encoding="utf-8")
-    archive = DIST / f"{name}-windows.zip"
-    if archive.exists():
-        archive.unlink()
-    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
-        for path in sorted(stage.rglob("*")):
-            if path.is_file():
-                zf.write(path, path.relative_to(stage.parent).as_posix())
-    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-    (DIST / f"{name}-windows.sha256.txt").write_text(f"{digest}  {archive.name}\n", encoding="utf-8")
-    print(f"Pasta do programa: {folder_size(DIST / 'MLA') / 1024 ** 2:.0f} MB")
-    print(f"Pacote: {archive} ({archive.stat().st_size / 1024 ** 2:.0f} MB)")
+        print(f"Autoteste do executável falhou (código {code}); instalador não gerado.")
+        return code or 1
+    if f"MLA {version} " not in report:
+        print("O executável não informa a versão esperada; instalador não gerado.")
+        return 1
+    build_payload(version)
+    start = time.perf_counter()
+    setup = build_setup(version)
+    digest = hashlib.sha256(setup.read_bytes()).hexdigest()
+    Path(str(setup) + ".sha256").write_text(f"{digest}  {setup.name}\n", encoding="utf-8")
+    notes = DIST / f"release-notes-{version}.md"
+    if not notes.exists():
+        notes.write_text(f"# MLA {version}\n\nInstalador: `{setup.name}` (SHA-256 `{digest}`).\n", encoding="utf-8")
+    print(f"Instalador construído em {time.perf_counter() - start:.0f} s")
+    print(f"Instalador: {setup} ({setup.stat().st_size / 1024 ** 2:.0f} MB)")
     print(f"SHA-256: {digest}")
     return 0
 
