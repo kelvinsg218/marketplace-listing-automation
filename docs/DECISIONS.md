@@ -71,3 +71,12 @@ client data starts confirmed, everything else unverified; nothing is inferred. E
 (`market_observations`) and AI suggestions (`ai_suggestions`) live in their own tables; suggestions only change a
 listing override when accepted, never the master product. External AI providers need the setting
 `ai.external_providers_allowed` (default off). Collectors must declare `terms_reviewed`; none ships.
+
+**D-017 (2026-10-19) Client companies = one data folder per company.** `config/workspaces.py` keeps the list in
+`<base>/workspaces.json` (atomic write). The first company ("principal") is the existing data folder, so old
+installations open unchanged; new companies live in `<base>/empresas/<slug>/` with their own database, images,
+files, backups, logs and Edge profiles (marketplace sessions never cross companies). Switching happens in-process
+(`app.CompanySession`): stop the executor, open the new context, replace the window, close the old context; on
+failure the current company stays open. No company deletion in the UI (user data). Known limitation: the license
+trial is stored per database (licensing is still a placeholder, D-011). No shared database with a company column:
+isolation by folder is simpler to audit, back up and hand over to a client.

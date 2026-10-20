@@ -7,7 +7,7 @@ Auditoria: `docs/AUDITORIA_MVP.md`. Atualize este arquivo ao concluir cada item.
 |---|---|---|
 | 1 | Auditoria + matriz + desktop×web + pesquisa ML/Shopee | Concluído |
 | 2 | Correções da demo: sandbox do Edge, Reexecutar, valores em reais estritos, Dashboard, tela final da importação, aviso duplicado, rótulo ZIP, URLs sem query nos logs, seletor de conta | Concluído (testes unitários + navegador de conexão aprovados; telas conferidas em 1366×768 e 1100×700) |
-| 3 | Multiempresa (pasta de dados isolada por empresa, troca de empresa) | Pendente |
+| 3 | Multiempresa (pasta de dados isolada por empresa, troca de empresa) | Concluído (D-017; testes de registro, isolamento e troca na interface) |
 | 4 | Histórico de alterações por campo + edição em lote segura | Pendente |
 | 5 | Exportação de anúncios preparados + relatório de pendências do catálogo | Pendente |
 | 6 | Cenário comercial (300 produtos, 500 imagens) com métricas reais | Pendente |

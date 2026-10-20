@@ -1,18 +1,21 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QButtonGroup, QFrame, QHBoxLayout, QMainWindow, QPushButton, QStackedWidget, QVBoxLayout, QWidget,
+    QButtonGroup, QFrame, QHBoxLayout, QInputDialog, QMainWindow, QMenu, QPushButton, QStackedWidget, QVBoxLayout,
+    QWidget,
 )
 
 from mla import APP_DISPLAY_NAME, __version__
 from mla.automation.executor import ExecutionManager
 from mla.automation.queue import QueueManager
 from mla.config.paths import resource_path
+from mla.config.workspaces import Workspace, WorkspaceError, WorkspaceRegistry
 from mla.persistence.migrator import migrate
 from mla.services.context import AppContext
 from mla.ui.execution_bridge import ExecutionBridge
@@ -29,7 +32,7 @@ from mla.ui.pages.marketplaces import MarketplacesPage
 from mla.ui.pages.products import ProductsPage
 from mla.ui.pages.settings import SettingsPage
 from mla.ui.theme import T
-from mla.ui.widgets.common import confirm, label, show_toast
+from mla.ui.widgets.common import confirm, inform, label, show_toast
 
 log = logging.getLogger(__name__)
 
@@ -56,10 +59,15 @@ class AutomationServices:
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, ctx: AppContext, start_executor: bool = True):
+    def __init__(self, ctx: AppContext, start_executor: bool = True, workspace: Workspace | None = None,
+                 registry: WorkspaceRegistry | None = None, on_switch: Callable[[str], None] | None = None):
         super().__init__()
         self.ctx = ctx
-        self.setWindowTitle(APP_DISPLAY_NAME)
+        self.workspace = workspace
+        self.registry = registry
+        self.on_switch = on_switch
+        self.switching = False  # set by the app while it replaces this window with another company
+        self._update_title()
         icon_path = resource_path("app.ico")
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
@@ -128,6 +136,22 @@ class MainWindow(QMainWindow):
         brand.addWidget(label("MLA", object_name="brand"))
         brand.addWidget(label("Marketplace Listing Automation", object_name="brandSub"))
         col.addLayout(brand)
+        if self.workspace is not None:
+            company = QVBoxLayout()
+            company.setContentsMargins(16, 0, 16, 16)
+            self.company_btn = QPushButton(self.workspace.name)
+            self.company_btn.setObjectName("companyButton")
+            self.company_btn.setIcon(icon("building-2", T.text_2, 16))
+            self.company_btn.setIconSize(QSize(16, 16))
+            self.company_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.company_btn.setToolTip("Empresa (cliente) aberta. Os dados de cada empresa ficam separados.")
+            self.company_btn.setAccessibleName(f"Empresa aberta: {self.workspace.name}")
+            if self.registry is not None and self.on_switch is not None:
+                menu = QMenu(self.company_btn)
+                menu.aboutToShow.connect(lambda: self._fill_company_menu(menu))
+                self.company_btn.setMenu(menu)
+            company.addWidget(self.company_btn)
+            col.addLayout(company)
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
         self.nav_buttons: dict[str, QPushButton] = {}
@@ -149,6 +173,57 @@ class MainWindow(QMainWindow):
         self.footer.setContentsMargins(22, 14, 16, 0)
         col.addWidget(self.footer)
         return side
+
+    # ------------------------------------------------------------------ companies
+    def _update_title(self) -> None:
+        name = self.workspace.name if self.workspace is not None else ""
+        self.setWindowTitle(f"{APP_DISPLAY_NAME} — {name}" if name else APP_DISPLAY_NAME)
+
+    def _fill_company_menu(self, menu: QMenu) -> None:
+        menu.clear()
+        for ws in self.registry.list():
+            action = menu.addAction(ws.name, lambda _c=False, slug=ws.slug: self._switch_company(slug))
+            action.setCheckable(True)
+            action.setChecked(ws.slug == self.workspace.slug)
+        menu.addSeparator()
+        menu.addAction("Nova empresa…", self._new_company)
+        menu.addAction("Renomear empresa atual…", self._rename_company)
+
+    def _new_company(self) -> None:
+        name, ok = QInputDialog.getText(self, "Nova empresa", "Nome da empresa (cliente):")
+        if not ok or not name.strip():
+            return
+        try:
+            workspace = self.registry.create(name)
+        except (WorkspaceError, OSError) as exc:
+            inform(self, "Não foi possível criar a empresa", str(exc), error=True)
+            return
+        if confirm(self, "Empresa criada", f"A empresa {workspace.name} foi criada com dados separados (catálogo, "
+                   "imagens, contas e sessões dos marketplaces). Abrir agora?", "Abrir empresa"):
+            self._switch_company(workspace.slug)
+
+    def _rename_company(self) -> None:
+        name, ok = QInputDialog.getText(self, "Renomear empresa", "Novo nome:", text=self.workspace.name)
+        if not ok or not name.strip():
+            return
+        try:
+            self.workspace = self.registry.rename(self.workspace.slug, name)
+        except (WorkspaceError, OSError) as exc:
+            inform(self, "Não foi possível renomear", str(exc), error=True)
+            return
+        self.company_btn.setText(self.workspace.name)
+        self.company_btn.setAccessibleName(f"Empresa aberta: {self.workspace.name}")
+        self._update_title()
+
+    def _switch_company(self, slug: str) -> None:
+        if slug == self.workspace.slug:
+            return
+        if self.services.executor.current_item is not None and not confirm(
+                self, "Execução em andamento", "Há um anúncio em execução nesta empresa. Trocar agora interrompe o "
+                "item atual, que volta para a fila quando esta empresa for aberta de novo. Trocar mesmo assim?",
+                "Trocar de empresa", danger=True):
+            return
+        self.on_switch(slug)
 
     def _update_footer(self) -> None:
         status = self.ctx.license.status()
@@ -178,7 +253,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         executor = self.services.executor
-        if executor.current_item is not None:
+        if executor.current_item is not None and not self.switching:
             if not confirm(self, "Execução em andamento", "Há um anúncio em execução. Fechar agora interrompe o "
                            "item atual, que volta para a fila na próxima abertura. Fechar mesmo assim?",
                            "Fechar", danger=True):

@@ -117,6 +117,15 @@ QToolTip {{ background: {T.raised_hi}; color: {T.text}; border: 1px solid {T.lin
 #navButton:checked {{ color: {T.text}; background: {T.violet_wash}; border-left: 2px solid {T.violet}; }}
 #navButton:focus {{ outline: none; }}
 #sidebarFoot {{ color: {T.text_3}; font-size: 11px; }}
+#companyButton {{
+    text-align: left; padding: 7px 26px 7px 10px; border: 1px solid {T.line}; border-radius: {T.r_control}px;
+    color: {T.text}; background: {T.surface}; font-size: 12px;
+}}
+#companyButton:hover {{ border-color: {T.line_strong}; background: {T.raised}; }}
+#companyButton::menu-indicator {{
+    image: url(__CHEVRON__); subcontrol-origin: padding; subcontrol-position: right center;
+    right: 8px; width: 12px; height: 12px;
+}}
 
 /* page header */
 #pageTitle {{ font-family: "{T.display_family}"; font-size: 24px; font-weight: 700; }}
@@ -247,4 +256,5 @@ def apply_theme(app: QApplication) -> None:
     app.setPalette(palette)
     from mla.ui.icons import icon_file
     check = icon_file("check", "#FFFFFF", 14).replace("\\", "/")
-    app.setStyleSheet(stylesheet().replace("__CHECK__", check))
+    chevron = icon_file("chevron-down", T.text_3, 12).replace("\\", "/")
+    app.setStyleSheet(stylesheet().replace("__CHECK__", check).replace("__CHEVRON__", chevron))
