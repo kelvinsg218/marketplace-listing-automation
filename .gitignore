@@ -44,4 +44,5 @@ demo/demo-data/
 demo/output/
 demo/fixtures/
 demo/screenshots/
+demo/pilot/
 demo/*.pid
