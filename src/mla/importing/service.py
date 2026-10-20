@@ -860,7 +860,7 @@ class ImportService:
             if product is None:
                 raise ValueError("o produto não existe mais no catálogo.")
             added = _attach_media(product, row.media, stored, origin, counts)
-            self.ctx.catalog.save(product)
+            self.ctx.catalog.save(product, source=origin)
             counts["updated"] += 1
             return f"Atualizado: {added} imagem(ns) adicionada(s)", product.id
         values = row.data.get("values", {})
@@ -878,7 +878,7 @@ class ImportService:
             product.original_description = values.get("description", "")
             product.source = f"{origin} ({batch.source_name})"
             _attach_media(product, row.media, stored, origin, counts)
-            self.ctx.catalog.save(product)
+            self.ctx.catalog.save(product, source=origin)
             counts["created"] += 1
             return "Criado", product.id
         product = self.ctx.products.get(row.product_id) if row.product_id else None
@@ -893,7 +893,7 @@ class ImportService:
                 continue
             _set(product, key, change["raw_new"])
         added = _attach_media(product, row.media, stored, origin, counts)
-        self.ctx.catalog.save(product)
+        self.ctx.catalog.save(product, source=origin)
         counts["updated"] += 1
         text = "Atualizado"
         if added:
@@ -928,7 +928,7 @@ class ImportService:
             result = "Variação atualizada"
             counts["updated"] += 1
         _attach_media(product, row.media, stored, origin, counts, variant=variant.name)
-        self.ctx.catalog.save(product)
+        self.ctx.catalog.save(product, source=origin)
         return result, product.id
 
     def _apply_compat(self, batch: ImportBatch, row: ImportRow, counts: dict[str, int]) -> tuple[str, int | None]:

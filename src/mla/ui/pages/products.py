@@ -227,9 +227,15 @@ class ProductsPage(Page):
         self.run_btn = button("Executar", "secondary", "play", self._run_selected)
         self.edit_btn = button("Editar", "ghost", "pencil", self._edit_selected)
         self.dup_btn = button("Duplicar", "ghost", "copy", self._duplicate_selected)
+        self.bulk_btn = button("Editar em lote", "ghost", "list-checks", self._bulk_edit)
         self.group_btn = button("Adicionar ao grupo", "ghost", "layers", self._add_to_group)
         self.del_btn = button("Excluir", "danger", "trash-2", self._delete_selected)
-        for b in (self.prepare_btn, self.run_btn, self.edit_btn, self.dup_btn, self.group_btn, self.del_btn):
+        self._action_buttons = (self.prepare_btn, self.run_btn, self.edit_btn, self.bulk_btn, self.dup_btn,
+                                self.group_btn, self.del_btn)
+        # secondary actions turn icon-only (with tooltip) when the bar does not fit, e.g. 1100 px windows
+        self._compactable = {b: b.text() for b in (self.run_btn, self.edit_btn, self.bulk_btn, self.dup_btn,
+                                                    self.group_btn, self.del_btn)}
+        for b in self._action_buttons:
             selection_bar.addWidget(b)
         self.root.addLayout(selection_bar)
 
@@ -328,11 +334,28 @@ class ProductsPage(Page):
         for b in (self.prepare_btn, self.run_btn, self.dup_btn, self.group_btn, self.del_btn):
             b.setVisible(n > 0)
         self.edit_btn.setVisible(n == 1)
+        self.bulk_btn.setVisible(n > 1)
+        self._fit_actions()
         if n:
             self.count_label.setText(plural(n, "selecionado", "selecionados"))
         elif self.model.total:
             self.count_label.setText(f"{plural(self.model.total, 'produto encontrado', 'produtos encontrados')}. "
                                      "Selecione para preparar anúncios, duplicar ou excluir.")
+
+    def _fit_actions(self) -> None:
+        for b, text in self._compactable.items():
+            b.setText(text)
+            b.setToolTip("")
+        shown = [b for b in self._action_buttons if not b.isHidden()]
+        needed = sum(b.sizeHint().width() for b in shown) + 8 * len(shown) + 120  # + "N selecionados"
+        if shown and needed > self.width() - 64:
+            for b, text in self._compactable.items():
+                b.setText("")
+                b.setToolTip(text.strip())
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._fit_actions()
 
     def _sort(self, field: str, descending: bool) -> None:
         self._query.order_by, self._query.descending = field, descending
@@ -409,6 +432,7 @@ class ProductsPage(Page):
             menu.addAction(icon("pencil"), "Editar", self._edit_selected)
         menu.addAction(icon("tag"), "Preparar anúncios…", self._prepare_listings)
         menu.addAction(icon("play"), "Executar", self._run_selected)
+        menu.addAction(icon("list-checks"), "Editar em lote…", self._bulk_edit)
         menu.addAction(icon("copy"), "Duplicar", self._duplicate_selected)
         menu.addAction(icon("layers"), "Adicionar ao grupo", self._add_to_group)
         menu.addAction(icon("download"), "Exportar selecionados (JSON)…",
@@ -416,6 +440,17 @@ class ProductsPage(Page):
         menu.addSeparator()
         menu.addAction(icon("trash-2", T.danger), "Excluir", self._delete_selected)
         menu.exec(self.table.viewport().mapToGlobal(pos))
+
+    def _bulk_edit(self) -> None:
+        ids = self.selected_ids()
+        if not ids:
+            return
+        from mla.ui.pages.bulk_edit import BulkEditDialog
+        dialog = BulkEditDialog(self.ctx, ids, self)
+        if dialog.exec() == BulkEditDialog.DialogCode.Accepted:
+            self.refresh()
+            show_toast(self, f"{plural(dialog.changed, 'produto alterado', 'produtos alterados')}. "
+                       "As alterações estão no histórico de cada produto.", "success")
 
     def _prepare_listings(self) -> None:
         ids = self.selected_ids()

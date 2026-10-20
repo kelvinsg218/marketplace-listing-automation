@@ -9,6 +9,7 @@ from mla.config.paths import AppPaths
 from mla.licensing.license import LicenseManager
 from mla.core.validation import CategoryRule
 from mla.persistence.backup import create_backup
+from mla.persistence.changes import ChangeRepository
 from mla.persistence.compatibility import CompatibilityRepository
 from mla.persistence.db import Database
 from mla.persistence.listings import ListingRepository
@@ -76,7 +77,7 @@ class AppContext:
         catalog = CatalogService(
             products, images, files,
             rules=lambda: [CategoryRule.from_dict(r) for r in settings.get("catalog.category_rules") or []],
-            confirmed_compat=compat_repo.confirmed_count)
+            confirmed_compat=compat_repo.confirmed_count, changes=ChangeRepository(db))
         listings = ListingService(ListingRepository(db), products, accounts, catalog, images)
         catalog.after_save.append(listings.refresh_for_product)
         ctx = cls(

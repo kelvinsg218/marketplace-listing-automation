@@ -80,3 +80,10 @@ files, backups, logs and Edge profiles (marketplace sessions never cross compani
 failure the current company stays open. No company deletion in the UI (user data). Known limitation: the license
 trial is stored per database (licensing is still a placeholder, D-011). No shared database with a company column:
 isolation by folder is simpler to audit, back up and hand over to a client.
+
+**D-018 (2026-10-19) Change history + bulk edit.** Every `CatalogService.save` records field-level differences in
+`product_changes` (migration 0008) inside the same transaction, with the origin ("Edição manual", "Importação #N",
+"Edição em lote", "Duplicado de X"). Values are stored as the user reads them (R$, labels), long texts up to 2,000
+characters; rows survive product deletion (product_id NULL, SKU kept). Bulk edit only touches descriptive fields
+(categoria, subcategoria, marca, fornecedor, unidade, garantia, condição, status comercial); price, stock, GTIN and
+SKU are never changed in bulk. It always shows a preview first and writes all-or-nothing in one transaction.

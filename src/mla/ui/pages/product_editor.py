@@ -21,7 +21,7 @@ from mla.services.compatibility import CompatibilityError
 from mla.services.files import FileStoreError
 from mla.ui.icons import pixmap
 from mla.ui.theme import T
-from mla.ui.widgets.common import StatusChip, button, clear_layout, divider, inform, label, set_prop
+from mla.ui.widgets.common import StatusChip, button, clear_layout, divider, format_when, inform, label, set_prop
 from mla.ui.widgets.image_gallery import ImageGallery
 
 LISTING_TYPES = {Marketplace.MERCADO_LIVRE: ["", "Clássico", "Premium"]}
@@ -197,6 +197,8 @@ class ProductEditor(QDialog):
         self._build_logistics()
         self._build_compatibility()
         self._build_marketplaces()
+        if not self.is_new:
+            self._build_history()
 
         body.addSpacing(24)
         body.addWidget(self._build_side())
@@ -386,6 +388,34 @@ class ProductEditor(QDialog):
         row.addStretch(1)
         layout.addLayout(row)
         self.tabs.addTab(page, "Compatibilidade")
+
+    def _build_history(self) -> None:
+        """Read-only list of every recorded field change: when, what, before, after and where it came from."""
+        from mla.ui.pages.compatibility import compat_table
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(4, 18, 12, 18)
+        layout.setSpacing(10)
+        layout.addWidget(label("Alterações gravadas neste produto, da mais recente para a mais antiga, com a origem "
+                               "(edição manual, importação ou edição em lote).", role="muted", wrap=True))
+        table = compat_table(["Quando", "Campo", "Antes", "Depois", "Origem"])
+        header = table.horizontalHeader()
+        for col, width in ((0, 105), (1, 160), (2, 150), (3, 150)):
+            header.resizeSection(col, width)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        records = self.ctx.catalog.history(self.product.id)
+        table.setRowCount(len(records))
+        for r, record in enumerate(records):
+            for c, text in enumerate((format_when(record.created_at), record.label, record.old or "(vazio)",
+                                      record.new or "(vazio)", record.source)):
+                item = QTableWidgetItem(text.replace("\n", " "))
+                item.setToolTip(text if len(text) > 30 else "")
+                table.setItem(r, c, item)
+        layout.addWidget(table, 1)
+        if not records:
+            layout.addWidget(label("Nenhuma alteração registrada ainda (o histórico começa nesta versão do MLA).",
+                                   role="hint"))
+        self.tabs.addTab(page, "Histórico")
 
     def _build_commercial(self) -> None:
         page, grid = _form_page()

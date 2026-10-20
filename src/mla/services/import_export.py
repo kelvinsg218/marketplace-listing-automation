@@ -207,7 +207,7 @@ class ImportExportService:
         if existing:
             product.id = existing
         try:
-            self.catalog.save(product)
+            self.catalog.save(product, source="Importação de arquivo exportado pelo MLA")
         except CatalogError as exc:
             result.errors.append(f"{where}: {exc}")
             return
