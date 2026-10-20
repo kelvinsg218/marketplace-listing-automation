@@ -2,7 +2,7 @@ import pytest
 
 from mla.core.enums import ConnectionStatus, ItemStatus, Marketplace
 from mla.core.models import MarketplaceAccount
-from mla.core.sites import AccountUrlError, site_for, validate_account_url
+from mla.core.sites import AccountUrlError, safe_url, site_for, validate_account_url
 from mla.services.accounts import AccountError
 from mla.services.context import AppContext
 
@@ -151,3 +151,11 @@ def test_profile_dir_is_always_managed_by_mla(ctx):
     assert ctx.account_service.profile_dir(account) == expected
     ctx.account_service.save(account)
     assert ctx.account_service.get(account.id).profile_dir == ""
+
+
+def test_safe_url_drops_query_and_fragment_from_messages():
+    assert safe_url("https://www.mercadolivre.com.br/vendas?code=TG-123&state=x#top") == \
+        "https://www.mercadolivre.com.br/vendas"
+    assert safe_url("https://user:senha@exemplo.com.br/a?b=1") == "https://exemplo.com.br/a"
+    assert safe_url("file:///C:/mock/sell.html?id=9") == "file:///C:/mock/sell.html"
+    assert safe_url("") == ""

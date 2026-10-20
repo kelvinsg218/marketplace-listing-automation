@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 
 from mla.core.enums import CatalogStatus, CommercialStatus, Condition, Marketplace, Verification
 from mla.core.models import Compatibility, Product, ProductMarketplaceData, ProductVariant
-from mla.core.units import ParseError, format_money, parse_money
+from mla.core.units import ParseError, format_money, parse_money_strict
 from mla.core.validation import MARKETPLACE_RULES, derive_status
 from mla.services.catalog import CatalogError
 from mla.services.compatibility import CompatibilityError
@@ -145,7 +145,7 @@ class _MarketplaceSection(QFrame):
         else:
             listing_type = self.listing_type.text().strip()
         try:
-            price = parse_money(self.price.text())
+            price = parse_money_strict(self.price.text())
             set_prop(self.price, "invalid", False)
         except ParseError:
             price = None
@@ -602,7 +602,7 @@ class ProductEditor(QDialog):
         for widget, attr in ((self.price, "price_cents"), (self.cost, "cost_cents"),
                              (self.promo_price, "promo_price_cents")):
             try:
-                setattr(p, attr, parse_money(widget.text()))
+                setattr(p, attr, parse_money_strict(widget.text()))
                 set_prop(widget, "invalid", False)
             except ParseError:
                 setattr(p, attr, None)
@@ -647,9 +647,10 @@ class ProductEditor(QDialog):
             if not any(cell(c) for c in range(5)):
                 continue
             try:
-                price = parse_money(cell(3))
+                price = parse_money_strict(cell(3))
             except ParseError:
                 price = None
+                self._money_error = True
             stock_text = cell(4)
             result.append(ProductVariant(
                 name=cell(0), attributes=_parse_attributes(cell(1)), sku=cell(2) or None, price_cents=price,

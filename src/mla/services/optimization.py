@@ -78,12 +78,20 @@ class ListingQualityService:
         checks.append((len(payload.images) >= 3, f"{len(payload.images)} imagem(ns): anúncios costumam usar ao menos 3."))
         checks.append((bool(product.gtin), "Sem GTIN/EAN no cadastro (algumas categorias exigem)."))
         checks.append((bool(product.brand and product.model), "Marca ou modelo não informados."))
-        checks.append((bool(payload.category_id), "Categoria do marketplace ainda não definida."))
+        # the validation report already warns about a missing category; don't repeat it as a tip
+        reported = {i.field for i in report.issues}
+        category_ok = bool(payload.category_id)
+        if "category_id" not in reported:
+            checks.append((category_ok, "Categoria do marketplace ainda não definida."))
         checks.append((len(payload.attributes) >= 3, "Poucos atributos preenchidos para a categoria."))
         if self.compat_count is not None:
             checks.append((self.compat_count(product.id) > 0, "Nenhuma compatibilidade confirmada cadastrada."))
         passed = sum(1 for ok, _ in checks if ok)
-        score = round(100 * passed / len(checks)) if checks else 100
+        total = len(checks)
+        if "category_id" in reported:  # still counts for the score
+            total += 1
+            passed += category_ok
+        score = round(100 * passed / total) if total else 100
         if blocking:
             score = min(score, 40)
         return QualityReport(score, blocking, [text for ok, text in checks if not ok])

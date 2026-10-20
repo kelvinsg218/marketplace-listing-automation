@@ -213,7 +213,7 @@ class AutomationsPage(Page):
             if group:
                 result = queue.enqueue_group(group)
         elif rerun_item is not None:
-            result = queue.requeue_item(rerun_item)
+            result = queue.requeue_item(rerun_item, self.ctx.listings.rerun_block_reason)
         if result is None:
             return
         self._report(result)

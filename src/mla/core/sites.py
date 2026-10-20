@@ -157,3 +157,11 @@ def _validate_simulated(text: str) -> str:
     if base != path and base not in path.parents:
         raise AccountUrlError("O marketplace simulado só aceita as páginas locais do próprio MLA.")
     return urlunsplit(("file", "", parts.path, parts.query, ""))
+
+
+def safe_url(url: str) -> str:
+    """URL for messages and logs: scheme, host and path only (query strings may carry tokens or codes)."""
+    parts = urlsplit(url or "")
+    if not parts.scheme or not parts.netloc:
+        return (url or "").split("?", 1)[0].split("#", 1)[0]
+    return f"{parts.scheme}://{parts.hostname or ''}{parts.path}"

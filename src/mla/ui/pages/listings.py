@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 from mla.automation.adapters import adapter_for
 from mla.core.enums import ListingStatus, Marketplace
 from mla.core.models import Listing, ListingRow
-from mla.core.units import ParseError, format_money, parse_money
+from mla.core.units import ParseError, format_money, parse_money_strict
 from mla.core.validation import MARKETPLACE_RULES
 from mla.services.listings import ListingError
 from mla.ui.icons import icon, pixmap
@@ -287,7 +287,7 @@ class ListingEditor(QDialog):
         listing.description = self.description.toPlainText().strip()
         problem = ""
         try:
-            listing.price_cents = parse_money(self.price.text())
+            listing.price_cents = parse_money_strict(self.price.text())
         except ParseError:
             problem = "Preço em formato inválido (use, por exemplo, 129,90)."
         stock = self.stock.text().strip()
@@ -530,6 +530,10 @@ class ListingsPage(Page):
         self.marketplace.currentIndexChanged.connect(self._marketplace_changed)
         bar.addWidget(self.marketplace)
         self.account = QComboBox()
+        # account labels like "Loja Demo ML (filial)" must stay readable; the popup grows with them
+        self.account.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.account.setMinimumWidth(200)
+        self.account.view().setTextElideMode(Qt.TextElideMode.ElideNone)
         self.account.currentIndexChanged.connect(self.refresh)
         bar.addWidget(self.account)
         self.status_filter = QComboBox()

@@ -153,3 +153,23 @@ def test_inactive_account_blocks(ctx, complete_product):
     ctx.account_service.save(second)
     report = ctx.listings.validate(listing)
     assert any(i.field == "account" for i in report.errors())
+
+
+def test_rerun_from_history_uses_listing_flow_and_keeps_approval_guard(ctx, complete_product, sim_account, queue):
+    product, listing = _prepared(ctx, complete_product, sim_account, "L-12")
+    product.marketplace_data[SIM].enabled = False  # prepared on the Anúncios page only (demo bug 1)
+    ctx.catalog.save(product)
+    ctx.listings.approve([listing.id])
+    first = queue.enqueue_listings([ctx.listings.get(listing.id)], ctx.listings.block_reason)
+    item = ctx.automation_repo.items_for_job(first.job_id)[0]
+    queue.finish_item(item, ItemStatus.FAILED, "Rejeitado na revisão")
+    result = queue.requeue_item(item.id, ctx.listings.rerun_block_reason)
+    assert result.queued == 1 and result.job_id != first.job_id
+    # a change after the approval blocks a blind re-execution
+    item = ctx.automation_repo.items_for_job(result.job_id)[0]
+    queue.finish_item(item, ItemStatus.FAILED, "Rejeitado na revisão")
+    product = ctx.products.get(product.id)
+    product.price_cents = 99990
+    ctx.catalog.save(product)
+    blocked = queue.requeue_item(item.id, ctx.listings.rerun_block_reason)
+    assert blocked.queued == 0 and "aprove de novo" in blocked.skipped[0].reason

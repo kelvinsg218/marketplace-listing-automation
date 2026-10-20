@@ -15,7 +15,9 @@ from typing import Protocol
 from mla.automation.browser import BrowserSessionManager, ProfileBusyError
 from mla.core.enums import ConnectionStatus, Marketplace
 from mla.core.models import MarketplaceAccount
-from mla.core.sites import AccountUrlError, SiteProfile, host_allowed, site_for, validate_account_url
+from mla.core.sites import (
+    AccountUrlError, SiteProfile, host_allowed, safe_url, site_for, validate_account_url,
+)
 
 log = logging.getLogger(__name__)
 MAX_LOGIN_ROUNDS = 3
@@ -111,17 +113,17 @@ class ConnectionTester:
                 page.wait_for_load_state("load", timeout=self._timeout_ms())
             except Exception as exc:  # navigation error
                 return ListingProbeResult(account.id, False, f"Falha ao abrir a criação de anúncios: "
-                                          f"{_first_line(exc)}", page.url, steps=steps)
+                                          f"{_first_line(exc)}", safe_url(page.url), steps=steps)
             shot = self._screenshot(account, page, "criacao")
             reached = any(marker in page.url for marker in site.listing_entry_markers)
             if site.is_login_url(page.url):
                 return ListingProbeResult(account.id, False, "O marketplace pediu login de novo ao abrir a "
-                                          "criação de anúncios.", page.url, shot, steps)
+                                          "criação de anúncios.", safe_url(page.url), shot, steps)
             if not reached:
-                return ListingProbeResult(account.id, False, f"A navegação terminou em outra página: {page.url}",
-                                          page.url, shot, steps)
+                return ListingProbeResult(account.id, False, f"A navegação terminou em outra página: {safe_url(page.url)}",
+                                          safe_url(page.url), shot, steps)
             self._say(steps, f"Página de criação aberta: {page.title()}")
-            return ListingProbeResult(account.id, True, "Área de criação de anúncios acessível.", page.url, shot,
+            return ListingProbeResult(account.id, True, "Área de criação de anúncios acessível.", safe_url(page.url), shot,
                                       steps)
         finally:
             self._close()
@@ -157,22 +159,22 @@ class ConnectionTester:
                                         f"Não foi possível abrir o navegador: {_first_line(exc)}", steps=steps)
             page = session.page
             self._say(steps, f"Navegador aberto com o perfil dedicado da conta {account.label}.")
-            self._say(steps, f"Abrindo {url}")
+            self._say(steps, f"Abrindo {safe_url(url)}")
             try:
                 page.goto(url, wait_until="domcontentloaded", timeout=self._timeout_ms())
                 page.wait_for_load_state("load", timeout=self._timeout_ms())
             except Exception as exc:
                 return ConnectionResult(account.id, ConnectionStatus.ERROR,
                                         f"Não foi possível abrir a URL cadastrada: {_first_line(exc)}",
-                                        final_url=page.url, steps=steps)
-            self._say(steps, f"Página aberta: {page.title() or page.url}")
+                                        final_url=safe_url(page.url), steps=steps)
+            self._say(steps, f"Página aberta: {page.title() or safe_url(page.url)}")
             if not self._same_site(site, page.url) and not site.is_login_url(page.url):
-                self._say(steps, f"Atenção: a página redirecionou para {page.url}")
+                self._say(steps, f"Atenção: a página redirecionou para {safe_url(page.url)}")
             if not site.session_mapped:
                 return ConnectionResult(
                     account.id, ConnectionStatus.UNVERIFIED,
                     f"A página abriu, mas a verificação de login do {account.marketplace.label} ainda não foi "
-                    "mapeada. A URL abrir não comprova que a conta está autenticada.", final_url=page.url,
+                    "mapeada. A URL abrir não comprova que a conta está autenticada.", final_url=safe_url(page.url),
                     steps=steps)
             result = self._check_session(account, site, page, steps)
             keep = keep_open and result.status is ConnectionStatus.CONNECTED
@@ -190,13 +192,13 @@ class ConnectionTester:
                 page.wait_for_load_state("load", timeout=self._timeout_ms())
             except Exception as exc:
                 return ConnectionResult(account.id, ConnectionStatus.ERROR,
-                                        f"Falha ao verificar a sessão: {_first_line(exc)}", final_url=page.url,
+                                        f"Falha ao verificar a sessão: {_first_line(exc)}", final_url=safe_url(page.url),
                                         steps=steps)
             if not site.is_login_url(page.url):
                 identity = self._identity(site, page)
                 message = "Sessão ativa" + (f" como {identity}." if identity else ".")
                 self._say(steps, message)
-                return ConnectionResult(account.id, ConnectionStatus.CONNECTED, message, identity, page.url, steps)
+                return ConnectionResult(account.id, ConnectionStatus.CONNECTED, message, identity, safe_url(page.url), steps)
             if round_ == MAX_LOGIN_ROUNDS:
                 break
             label = "A sessão expirou" if not_logged is ConnectionStatus.EXPIRED else "É preciso entrar na conta"
@@ -205,9 +207,9 @@ class ConnectionTester:
                 self._wait_for_user(f"{label}. Entre na conta {account.label} no navegador aberto e depois "
                                     "clique em Continuar.")
             except _Cancelled:
-                return ConnectionResult(account.id, not_logged, f"{label}; login não concluído.", final_url=page.url,
+                return ConnectionResult(account.id, not_logged, f"{label}; login não concluído.", final_url=safe_url(page.url),
                                         steps=steps)
-        return ConnectionResult(account.id, not_logged, "O login não foi concluído.", final_url=page.url, steps=steps)
+        return ConnectionResult(account.id, not_logged, "O login não foi concluído.", final_url=safe_url(page.url), steps=steps)
 
     def _wait_for_user(self, message: str) -> None:
         self._event.clear()

@@ -171,6 +171,9 @@ def test_duplicate_sku_in_file_and_errors_per_row(ctx, tmp_path):
     assert "sem SKU" in rows[7].issues[0]["message"]
     report = ctx.imports.commit(batch.id)
     assert report.counts["created"] == 1 and report.counts["skipped"] == 6
+    # rows refused by the analysis are reported as rejected, not as "ignored"
+    assert report.counts["rejected"] == 6 and "6 recusado(s) por erro" in ctx.imports.get(batch.id).message
+    assert ctx.imports.rows(batch.id)[3].outcome == "Recusado: erro na análise"
     out = tmp_path / "relatorio.csv"
     assert ctx.imports.export_report(batch.id, out) == 7
     assert "notação científica" in out.read_text(encoding="utf-8-sig")

@@ -247,6 +247,21 @@ class ListingService:
             return errors[0] if errors else "O conteúdo mudou depois da aprovação; revise e aprove de novo."
         return None
 
+    def rerun_block_reason(self, listing: Listing) -> str | None:
+        """Why a finished listing cannot run again under its earlier approval (None = it can)."""
+        current = self.repo.get(listing.id) if listing.id is not None else None
+        if current is None:
+            return "O anúncio não existe mais."
+        product = self.products.get(current.product_id)
+        if product is None:
+            return "Produto não encontrado."
+        errors = [i.message for i in self.validate(current, product).issues if i.severity == "error"]
+        if errors:
+            return errors[0]
+        if not current.approved_hash or current.approved_hash != self.fingerprint(self.payload(current, product)):
+            return "O conteúdo mudou depois da aprovação; revise e aprove de novo na tela Anúncios."
+        return None
+
     # ------------------------------------------------------------------ queries
     def get(self, listing_id: int) -> Listing | None:
         return self.repo.get(listing_id)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QProgressBar, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QProgressBar, QScrollArea, QVBoxLayout, QWidget
 
 from mla.core.enums import CatalogStatus, ItemStatus, ListingStatus, Marketplace
 from mla.ui.pages.base import Page
@@ -12,6 +12,22 @@ from mla.ui.widgets.common import Panel, StatusChip, button, clear_layout, divid
 from mla.ui.widgets.pipeline import PipelineRail, Stage
 
 _DAYS = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
+
+
+def _scrolling_body(panel: Panel, spacing: int) -> QVBoxLayout:
+    """Panel content that scrolls instead of squeezing rows into each other on short windows."""
+    content = QWidget()
+    box = QVBoxLayout(content)
+    box.setContentsMargins(0, 0, 0, 0)
+    box.setSpacing(spacing)
+    area = QScrollArea()
+    area.setWidgetResizable(True)
+    area.setFrameShape(QFrame.Shape.NoFrame)
+    area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    area.setMinimumHeight(96)
+    area.setWidget(content)
+    panel.body.addWidget(area, 1)
+    return box
 
 
 class DashboardPage(Page):
@@ -38,10 +54,7 @@ class DashboardPage(Page):
         grid.setVerticalSpacing(16)
         self.recent_panel = Panel("Atividade recente")
         self.recent_panel.header.addWidget(button("Ver histórico", "ghost", None, lambda: self.navigate("history")))
-        self.recent_box = QVBoxLayout()
-        self.recent_box.setSpacing(0)
-        self.recent_panel.body.addLayout(self.recent_box)
-        self.recent_panel.body.addStretch(1)
+        self.recent_box = _scrolling_body(self.recent_panel, 0)
         grid.addWidget(self.recent_panel, 0, 0, 2, 1)
 
         self.attention_panel = Panel("Precisa de você")
@@ -51,10 +64,7 @@ class DashboardPage(Page):
         grid.addWidget(self.attention_panel, 0, 1)
 
         self.market_panel = Panel("Por marketplace")
-        self.market_box = QVBoxLayout()
-        self.market_box.setSpacing(14)
-        self.market_panel.body.addLayout(self.market_box)
-        self.market_panel.body.addStretch(1)
+        self.market_box = _scrolling_body(self.market_panel, 14)
         grid.addWidget(self.market_panel, 1, 1)
         grid.setColumnStretch(0, 3)
         grid.setColumnStretch(1, 2)
@@ -97,6 +107,7 @@ class DashboardPage(Page):
             self.recent_box.addWidget(label(
                 "Nenhuma execução ainda. Cadastre um produto pronto e use Executar para preparar o primeiro anúncio.",
                 role="muted", wrap=True))
+            self.recent_box.addStretch(1)
             return
         for index, item in enumerate(items):
             row = QWidget()
@@ -113,6 +124,7 @@ class DashboardPage(Page):
             self.recent_box.addWidget(row)
             if index < len(items) - 1:
                 self.recent_box.addWidget(divider())
+        self.recent_box.addStretch(1)
 
     def _fill_attention(self, stats) -> None:
         clear_layout(self.attention_box)
@@ -164,8 +176,9 @@ class DashboardPage(Page):
                                           (running, f"{running} na fila ou em execução"),
                                           (failed, f"{failed} com falha ou intervenção")) if n]
             if total:
-                block.addWidget(label(", ".join(parts) if parts else "Nada pendente", role="hint"))
+                block.addWidget(label(", ".join(parts) if parts else "Nada pendente", role="hint", wrap=True))
             self.market_box.addLayout(block)
+        self.market_box.addStretch(1)
 
     def _open_stage(self, key: str) -> None:
         mapping = {

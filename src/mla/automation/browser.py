@@ -72,7 +72,9 @@ class BrowserSessionManager:
             if self._playwright is None:
                 from playwright.sync_api import sync_playwright
                 self._playwright = sync_playwright().start()
-            kwargs = {"headless": self.headless, "no_viewport": not self.headless, "accept_downloads": False}
+            kwargs = {"headless": self.headless, "no_viewport": not self.headless, "accept_downloads": False,
+                      # Playwright passes --no-sandbox by default; keep the browser sandbox on.
+                      "chromium_sandbox": True}
             if self.channel != "chromium":
                 kwargs["channel"] = self.channel
             try:

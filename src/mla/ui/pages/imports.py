@@ -23,8 +23,8 @@ from mla.importing.service import Analysis, ImportCancelled, ImportOptions, Impo
 from mla.ui.pages.base import Page
 from mla.ui.theme import T
 from mla.ui.widgets.common import (
-    Callout, EmptyState, Panel, StatusChip, StatusDelegate, StepRail, button, confirm, format_when, inform, label,
-    plural, show_toast,
+    Callout, EmptyState, Panel, StatusChip, StatusDelegate, StepRail, button, clear_layout, confirm, format_when,
+    inform, label, plural, show_toast,
 )
 from mla.ui.workers import TaskRunner
 
@@ -626,9 +626,13 @@ class ImportWizard(QDialog):
         layout.setSpacing(12)
         self.done_title = label("", object_name="sectionTitle")
         layout.addWidget(self.done_title)
-        self.done_text = label("", wrap=True)
-        layout.addWidget(self.done_text)
-        layout.addWidget(label("Linhas com erro na gravação", role="muted"))
+        self.done_counts = QHBoxLayout()
+        self.done_counts.setSpacing(8)
+        layout.addLayout(self.done_counts)
+        self.done_note = Callout()
+        layout.addWidget(self.done_note)
+        self.errors_label = label("Linhas que precisam de correção na origem", role="muted")
+        layout.addWidget(self.errors_label)
         self.errors_table = _table(["Linha", "SKU", "Resultado"])
         self.errors_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.errors_table, 1)
@@ -636,6 +640,8 @@ class ImportWizard(QDialog):
         row.addWidget(button("Exportar relatório completo…", "secondary", "download", self._export_report))
         row.addStretch(1)
         layout.addLayout(row)
+        self.done_spacer = QWidget()
+        layout.addWidget(self.done_spacer, 1)
         return page
 
     def show_report(self) -> None:
@@ -646,15 +652,40 @@ class ImportWizard(QDialog):
         batch = self.service.get(self.batch_id)
         result = batch.counts.get("result", {})
         self.done_title.setText("Importação concluída")
-        self.done_text.setText(batch.message + " Os produtos já aparecem no Catálogo; mídias pendentes ficam "
-                               "marcadas em cada produto.")
-        errors = [r for r in self.service.rows(self.batch_id, limit=10_000) if r.outcome.startswith("Erro")]
-        self.errors_table.setRowCount(len(errors))
-        for r, row in enumerate(errors):
+        clear_layout(self.done_counts)
+        rejected = result.get("rejected", 0)
+        tiles = (("Criados", result.get("created", 0), "success"),
+                 ("Atualizados", result.get("updated", 0), "violet"),
+                 ("Ignorados ou sem mudanças", result.get("skipped", 0) - rejected, "neutral"),
+                 ("Recusados por erro", rejected, "danger"),
+                 ("Erros na gravação", result.get("errors", 0), "danger"),
+                 ("Imagens adicionadas", result.get("images", 0), "neutral"),
+                 ("Mídias pendentes", result.get("missing_media", 0), "warning"))
+        for text, value, tone in tiles:
+            if value or text in ("Criados", "Atualizados"):
+                self.done_counts.addWidget(StatusChip(text=f"{text}: {value}", tone=tone))
+        self.done_counts.addStretch(1)
+        problems = [r for r in self.service.rows(self.batch_id, limit=10_000)
+                    if r.outcome.startswith(("Erro", "Recusado"))]
+        note = "Os produtos já aparecem no Catálogo."
+        if result.get("missing_media"):
+            note += " Mídias pendentes ficam marcadas em cada produto."
+        if problems:
+            note += (" As linhas abaixo não entraram no catálogo: corrija-as na planilha de origem e importe de novo "
+                     "(as linhas já gravadas aparecerão como sem mudanças).")
+        self.done_note.set_text(note)
+        self.errors_table.setRowCount(len(problems))
+        for r, row in enumerate(problems):
+            reason = row.outcome
+            errors = [i["message"] for i in row.issues if i.get("severity") == "error"]
+            if row.outcome.startswith("Recusado") and errors:
+                reason = "Recusado: " + "; ".join(errors)
             self.errors_table.setItem(r, 0, _item(row.data.get("where") or str(row.row_no)))
             self.errors_table.setItem(r, 1, _item(row.sku))
-            self.errors_table.setItem(r, 2, _item(row.outcome))
-        self.errors_table.setVisible(bool(result.get("errors")))
+            self.errors_table.setItem(r, 2, _item(reason))
+        self.errors_label.setVisible(bool(problems))
+        self.errors_table.setVisible(bool(problems))
+        self.done_spacer.setVisible(not problems)
 
     # ------------------------------------------------------------------ navigation
     def _go(self, index: int) -> None:
@@ -869,7 +900,7 @@ class ImportsPage(Page):
             self.table.setItem(r, 0, _item(format_when(batch.created_at)))
             self.table.setItem(r, 1, _item(batch.source_name))
             self.table.setItem(r, 2, _item(f"{TARGET_LABELS.get(batch.target, batch.target)}, "
-                                           f"{FORMAT_LABELS.get(batch.format, 'pasta').split(' ')[0]}", muted=True))
+                                           f"{batch.format.upper() if batch.format in FORMAT_LABELS else 'pasta'}", muted=True))
             status = QTableWidgetItem("")
             status.setData(Qt.ItemDataRole.UserRole, batch.status.value)
             self.table.setItem(r, 3, status)

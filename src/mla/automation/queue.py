@@ -108,7 +108,8 @@ class QueueManager:
                 account = self.accounts.get(listing.account_id)
                 if account is None or not account.is_active:
                     reason = "A conta do anúncio não existe mais ou está desativada."
-            reason = reason or self._duplicate_reason(listing.product_id, listing.marketplace, listing.account_id)                 or block(listing)
+            reason = (reason or self._duplicate_reason(listing.product_id, listing.marketplace, listing.account_id)
+                      or block(listing))
             if reason:
                 result.skipped.append(Skipped(listing.product_id, name, listing.marketplace, reason))
                 continue
@@ -160,8 +161,12 @@ class QueueManager:
         return self.enqueue(group.product_ids, targets, label=f"Grupo {group.name}", kind="group",
                             group_id=group.id)
 
-    def requeue_item(self, item_id: int) -> EnqueueResult:
-        """Safe re-execution of a finished item: same target, new job, same duplicate checks."""
+    def requeue_item(self, item_id: int,
+                     listing_block: Callable[[Listing], str | None] | None = None) -> EnqueueResult:
+        """Safe re-execution of a finished item: same target, new job, same duplicate checks.
+
+        A listing approved on the Anúncios page goes back through the listing flow (guarded by
+        `listing_block`); anything else uses the product flow."""
         item = self.repo.get_item(item_id)
         if item is None or item.product_id is None:
             result = EnqueueResult()
@@ -172,7 +177,11 @@ class QueueManager:
             result.skipped.append(Skipped(item.product_id, item.product_name, item.marketplace,
                                           "A execução ainda está em andamento."))
             return result
-        return self.enqueue([item.product_id], [item.marketplace], label=f"Reexecução: {item.product_name}",
+        label = f"Reexecução: {item.product_name}"
+        listing = self.repo.get_listing(item.product_id, item.marketplace, item.account_id)
+        if listing_block is not None and listing is not None and listing.approved_hash:
+            return self.enqueue_listings([listing], listing_block, label=label)
+        return self.enqueue([item.product_id], [item.marketplace], label=label,
                             account_ids={item.marketplace: item.account_id})
 
     # ------------------------------------------------------------------ control

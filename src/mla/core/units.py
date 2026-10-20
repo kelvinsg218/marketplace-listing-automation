@@ -38,6 +38,16 @@ def parse_money(text: str) -> int | None:
     return int((value * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
+_MONEY_STRICT = re.compile(r"^\s*(R\$)?\s*-?\s*[\d.,]*\s*$", re.IGNORECASE)
+
+
+def parse_money_strict(text: str) -> int | None:
+    """Like parse_money, but refuses stray letters ("12,3x" is an error, not R$ 12,30)."""
+    if (text or "").strip() and not _MONEY_STRICT.match(text):
+        raise ParseError(f"Valor em reais inválido: {text.strip()!r}")
+    return parse_money(text)
+
+
 def format_money(cents: int | None, symbol: bool = True) -> str:
     if cents is None:
         return ""

@@ -799,9 +799,12 @@ class ImportService:
                         if done % 50 == 0 or done == total:
                             progress(done, total, f"Gravando: {done} de {total}")
                     offset += CHUNK
-                conn.execute("UPDATE import_rows SET outcome = 'Ignorado' WHERE batch_id = ? AND decision = 'skip'",
+                conn.execute("UPDATE import_rows SET outcome = CASE WHEN action = 'error' THEN"
+                             " 'Recusado: erro na análise' ELSE 'Ignorado' END WHERE batch_id = ? AND decision = 'skip'",
                              (batch_id,))
                 counts["skipped"] = self.repo.count_rows(batch_id, decisions=["skip"])
+                # rows refused by the analysis are not "ignored": the client must fix them at the source
+                counts["rejected"] = self.repo.count_rows(batch_id, actions=[ImportAction.ERROR], decisions=["skip"])
                 message = _commit_message(counts)
                 self.repo.update_batch(batch_id, status=ImportStatus.COMPLETED, finished_at=now_iso(),
                                        message=message, counts=batch.counts | {"result": counts})
@@ -1136,12 +1139,11 @@ def _attach_media(product: Product, media: list[dict[str, str]], stored, origin:
 
 
 def _commit_message(counts: dict[str, int]) -> str:
-    parts = [f"{counts['created']} criado(s)", f"{counts['updated']} atualizado(s)",
-             f"{counts.get('skipped', 0)} ignorado(s)"]
-    if counts["errors"]:
-        parts.append(f"{counts['errors']} com erro")
-    if counts["images"]:
-        parts.append(f"{counts['images']} imagem(ns) adicionada(s)")
-    if counts["missing_media"]:
-        parts.append(f"{counts['missing_media']} mídia(s) pendente(s)")
+    """Short summary for the history list; zero counts are left out (except "criado(s)")."""
+    rejected = counts.get("rejected", 0)
+    pairs = ((counts["created"], "criado(s)"), (counts["updated"], "atualizado(s)"),
+             (rejected, "recusado(s) por erro na análise"), (counts["errors"], "com erro na gravação"),
+             (counts.get("skipped", 0) - rejected, "ignorado(s) ou sem mudanças"),
+             (counts["images"], "imagem(ns) adicionada(s)"), (counts["missing_media"], "mídia(s) pendente(s)"))
+    parts = [f"{n} {text}" for index, (n, text) in enumerate(pairs) if n or index == 0]
     return ", ".join(parts) + "."
