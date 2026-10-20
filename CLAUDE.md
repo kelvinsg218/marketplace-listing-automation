@@ -15,7 +15,8 @@ marketplaces. UI text is Brazilian Portuguese; code and comments in English.
 - Tests: `.venv\Scripts\python -m pytest` | fast: `-m "not browser"` | E2E only: `-m browser`
 - Lint: `.venv\Scripts\python -m pyflakes src tools tests`
 - UI screenshots for review: `.venv\Scripts\python tools/ui_snapshots.py <out_dir>`
-- Build: `.venv\Scripts\pyinstaller mla.spec --noconfirm` then `dist\MLA\MLA.exe --self-test`
+- Build + package: `.venv\Scripts\python tools/build_release.py` (PyInstaller, exe self-test in a temp data dir,
+  `dist\MLA-<ver>-windows.zip` with `installer\` scripts)
 - Data dir: `%LOCALAPPDATA%\MLA` (override with `MLA_DATA_DIR`)
 
 ## Hard rules

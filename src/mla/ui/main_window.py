@@ -176,8 +176,9 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ companies
     def _update_title(self) -> None:
+        # Qt already appends the application display name ("Empresa X - Marketplace Listing Automation")
         name = self.workspace.name if self.workspace is not None else ""
-        self.setWindowTitle(f"{APP_DISPLAY_NAME} — {name}" if name else APP_DISPLAY_NAME)
+        self.setWindowTitle(name or APP_DISPLAY_NAME)
 
     def _fill_company_menu(self, menu: QMenu) -> None:
         menu.clear()

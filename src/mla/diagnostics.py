@@ -35,6 +35,26 @@ def _check_resources(_paths: AppPaths) -> str:
     return f"{len(required)} recursos encontrados"
 
 
+def _check_spreadsheets(_paths: AppPaths) -> str:
+    """openpyxl (read/write XLSX) and pypdf are bundled and work: the importer and the exports depend on them."""
+    import tempfile
+    from pathlib import Path
+
+    import pypdf
+
+    from mla.importing.readers import open_source
+    from mla.services.listing_export import SpreadsheetWriter
+    with tempfile.TemporaryDirectory(prefix="mla-selftest-") as folder:
+        target = Path(folder) / "teste.xlsx"
+        writer = SpreadsheetWriter(target)
+        writer.add("Produtos", ["SKU", "Nome", "Preço"], [["ST-1", "Teste", "10,00"], ["ST-2", "=1+1", "5,00"]])
+        writer.save()
+        rows = open_source(target).preview(10)
+        if [r.values.get("SKU") for r in rows] != ["ST-1", "ST-2"] or rows[1].values.get("Nome") != "=1+1":
+            raise RuntimeError("leitura da planilha gravada não confere")
+    return f"XLSX gravado e lido de volta; pypdf {pypdf.__version__}"
+
+
 def _check_browser(paths: AppPaths) -> str:
     from playwright.sync_api import sync_playwright
 
@@ -42,7 +62,7 @@ def _check_browser(paths: AppPaths) -> str:
     channel = DEFAULTS["browser.channel"]
     started = time.perf_counter()
     with sync_playwright() as pw:
-        kwargs = {"headless": True}
+        kwargs = {"headless": True, "chromium_sandbox": True}  # same sandbox setting as the real sessions
         if channel != "chromium":
             kwargs["channel"] = channel
         browser = pw.chromium.launch(**kwargs)
@@ -59,6 +79,7 @@ def _check_browser(paths: AppPaths) -> str:
 CHECKS: list[tuple[str, Callable[[AppPaths], str]]] = [
     ("Banco de dados", _check_database),
     ("Recursos do aplicativo", _check_resources),
+    ("Planilhas e PDF", _check_spreadsheets),
     ("Navegador e automação", _check_browser),
 ]
 

@@ -1,0 +1,29 @@
+MLA - Marketplace Listing Automation (Windows)
+==============================================
+
+Requisitos
+- Windows 10 ou 11 (64 bits), 4 GB de RAM (8 GB recomendados), 1 GB livre em disco + espaço para as imagens.
+- Microsoft Edge instalado (vem com o Windows). A automação usa o Edge do sistema.
+
+Instalar ou atualizar
+1. Extraia este .zip numa pasta (por exemplo, Downloads\MLA-instalacao).
+2. Dê dois cliques em instalar.cmd. Não precisa de administrador.
+   Opções: instalar.cmd -AtalhoNaAreaDeTrabalho   (cria atalho na área de trabalho)
+           instalar.cmd -Verificar                (roda o autoteste numa pasta temporária)
+3. Abra o MLA pelo menu Iniciar.
+
+O programa fica em %LOCALAPPDATA%\Programs\MLA. Os dados ficam em %LOCALAPPDATA%\MLA e NÃO são apagados ao
+atualizar: para atualizar, instale a versão nova por cima (feche o MLA antes). Antes de migrar o banco para uma
+versão nova, o MLA faz um backup automático em %LOCALAPPDATA%\MLA\backups.
+
+Desinstalar
+- Configurações > Aplicativos instalados > "MLA - Marketplace Listing Automation" > Desinstalar,
+  ou desinstalar.cmd na pasta do programa. Os dados são mantidos.
+- Para apagar também os dados (catálogo, imagens, contas, sessões e backups):
+  desinstalar.cmd -RemoverDados -ConfirmarRemocaoDeDados
+
+Aviso do Windows (SmartScreen)
+Esta versão não tem assinatura digital de código. O Windows pode mostrar "O Windows protegeu o computador".
+Confira a origem do arquivo e o código SHA-256 que acompanha o pacote antes de continuar.
+
+Os scripts instalar.ps1 e desinstalar.ps1 são texto: podem ser lidos antes da execução.
