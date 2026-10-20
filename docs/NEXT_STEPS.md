@@ -1,26 +1,19 @@
-# Next steps
+# Próximos passos
 
-## Now — owner review of phase 9 (next session starts here)
-1. Owner tests the open app: Importações (CSV/XLSX/ZIP of the company base), Catálogo (filters, editor tabs
-   Técnico/Compatibilidade), Compatibilidades, Anúncios (prepare, edit, approve), Marketplaces (add account + URL).
-2. Collect feedback; triage bugs / visual / UX; fix with tests and `tools/ui_snapshots.py`.
-3. Phase 9 committed (371e0f8). Keep asking before each commit; no Co-Authored-By trailer.
+## Ações humanas necessárias (bloqueiam o próximo nível)
+1. **Testar o pacote num computador limpo** (sem Python): `instalar.cmd -Verificar`, abrir, importar uma base
+   fictícia, exportar, desinstalar. Registrar o resultado.
+2. **Autorizar (ou não) o push** dos commits locais desta missão para o repositório e a atualização da vitrine.
+3. **Primeiro piloto supervisionado** com uma base real de cliente, seguindo
+   [comercial/CHECKLIST_IMPLANTACAO.md](comercial/CHECKLIST_IMPLANTACAO.md), medindo também o processo manual.
+4. **Mercado Livre:** decidir entre (a) registrar um aplicativo no portal de desenvolvedores e usar a API oficial
+   com OAuth do vendedor ou (b) inspeção autorizada, só leitura, do formulário real. Nenhuma das duas foi feita.
+5. **Certificado de assinatura de código** (custo) para eliminar o aviso do SmartScreen antes de vender.
 
-## Fixes from the 2026-10-19 demo (docs/DEMO_TEST_REPORT.md)
-1. Enable the Edge sandbox (`chromium_sandbox=True`) for the dedicated profiles.
-2. History "Reexecutar" must requeue the listing (listing flow) when one exists.
-3. Strict money validation in the product editor (as the importer already does).
-4. Dashboard "Atividade recente" layout at 1366×768; import "Concluído" step layout and wording.
-
-## Blocked on the owner
-- **Mercado Livre real inspection** (brief phase 7): owner registers the seller URL in Marketplaces, authorizes,
-  logs in by hand in the dedicated Edge window; then map (read-only) the session check page, identity element and
-  the path to "anunciar", fill `SITES[MERCADO_LIVRE]` in `core/sites.py` with what was observed, stop before any
-  form filling. Never publish or edit real listings.
-
-## Then
-- Settings UI: category rules (`catalog.category_rules`), AI consent (`ai.external_providers_allowed`).
-- Assign images to a variation in the editor (data model + import already support `ProductImage.variant`).
-- Phase 4 (ML adapter) after the inspection: real category/attribute reading, review-gated first run.
-- Rebuild with PyInstaller (check openpyxl/pypdf collected), `--self-test`, installer, clean-machine test.
-- Market references UI (manual price observations) once the owner wants it; collectors only with reviewed terms.
+## Depois (desenvolvimento, por prioridade)
+- Associar fotos às variações (modelo de dados e importação já suportam `ProductImage.variant`).
+- Distinguir "arquivo corrompido" de "não encontrado" nas mídias pendentes.
+- Preenchimento do modelo oficial de envio em massa, a partir de um modelo real baixado pelo cliente.
+- Telas de regras por categoria e de consentimento de IA.
+- Barra de progresso na exportação grande; atualização automática; licenças assinadas.
+- Adaptador do Mercado Livre (fase 4) só depois do passo 4 acima.

@@ -8,12 +8,20 @@ Apresentação visual (capturas de tela e página para portfólio): repositório
 [marketplace-listing-automation-showcase](https://github.com/kelvinsg218/marketplace-listing-automation-showcase).
 
 ## Status
-v0.1.0 + etapa “Catálogo Mestre Inteligente”. Tudo o que está em “O que já funciona” é coberto por testes
-automatizados (178: unidade, interface e ponta a ponta no Edge com o marketplace simulado). A **publicação real no
-Mercado Livre e na Shopee ainda está em desenvolvimento**; o fluxo completo de publicação roda hoje no marketplace
-simulado. Detalhes em [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md).
+v0.2.0 (MVP para piloto supervisionado). Tudo o que está em “O que já funciona” é coberto por testes automatizados
+(230: unidade, interface e ponta a ponta no Edge com o marketplace simulado) e foi exercitado num cenário de 300
+produtos fictícios com métricas medidas ([docs/DEMO_COMERCIAL.md](docs/DEMO_COMERCIAL.md)). A **publicação real no
+Mercado Livre e na Shopee não está verificada**; hoje o MLA entrega uma planilha de anúncios conferida e o fluxo
+completo de publicação roda no marketplace simulado. Pacote comercial em [docs/comercial/](docs/comercial/README.md);
+detalhes técnicos em [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md).
 
 ## O que já funciona
+- **Empresas (clientes):** uma pasta de dados isolada por empresa (catálogo, imagens, contas, sessões, backups,
+  logs) e troca de empresa dentro do app.
+- **Histórico e correção em lote:** cada alteração de produto registrada campo a campo com a origem; edição em
+  lote de campos descritivos com pré-visualização (preço, estoque, GTIN e SKU nunca em lote).
+- **Exportação:** planilha intermediária de anúncios (XLSX/CSV, uma linha por variação, fotos copiadas, abas de
+  pendências e resumo) e relatório de pendências do catálogo para o fornecedor.
 - **Catálogo mestre:** SKU principal e de variações, código do fabricante, GTIN/EAN (dígito verificador conferido),
   marca, modelo, categoria, fornecedor, nome comercial; custo, preço de venda e promocional, estoque e estoque
   mínimo, unidade, garantia, condição, situação comercial; descrição original e técnica, material, cor, peso,
@@ -52,17 +60,21 @@ simulado. Detalhes em [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md).
 - Dados do cliente, informações externas e sugestões de IA ficam separados.
 
 ## Ainda não disponível
-- Publicação real no **Mercado Livre** e na **Shopee** (depende da inspeção autorizada dos formulários reais).
+- Publicação real no **Mercado Livre** e na **Shopee** (depende de autorização da conta e de validação
+  supervisionada do formulário real ou da API oficial); preenchimento do modelo oficial de envio em massa.
 - Coleta automática de dados de concorrentes e agentes de IA (apenas a estrutura existe).
-- Imagens embutidas em XLSX, download de imagens por link e PDF digitalizado (OCR).
-- Instalador, cobrança e servidor de licenças.
+- Imagens embutidas em XLSX, download de imagens por link, PDF digitalizado (OCR) e foto por variação automática.
+- Assinatura digital do executável, atualização automática, cobrança e servidor de licenças.
+- Lista completa: [docs/comercial/LIMITACOES_CONHECIDAS.md](docs/comercial/LIMITACOES_CONHECIDAS.md).
 
 ## Tecnologia
 Python 3.13 · PySide6 (Qt) · SQLite (WAL, migrações versionadas) · Playwright com Microsoft Edge · openpyxl ·
 pypdf · pytest.
 
 ## Começar
-- Usuário: [docs/USER_GUIDE.md](docs/USER_GUIDE.md) e [docs/INSTALLATION.md](docs/INSTALLATION.md).
+- Cliente: [instalação](docs/comercial/GUIA_INSTALACAO.md), [manual rápido](docs/comercial/MANUAL_RAPIDO.md) e
+  [guia de importação](docs/comercial/GUIA_IMPORTACAO.md).
+- Usuário (guia completo): [docs/USER_GUIDE.md](docs/USER_GUIDE.md) e [docs/INSTALLATION.md](docs/INSTALLATION.md).
 - Desenvolvimento: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md), [docs/TESTING.md](docs/TESTING.md),
   [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DECISIONS.md](docs/DECISIONS.md).
 - Estado do projeto: [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md) e [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md).

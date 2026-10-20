@@ -1,5 +1,11 @@
 # Guia do usuário
 
+## 0. Escolha a empresa
+O botão com o nome da empresa, abaixo do logotipo, lista as empresas. **Nova empresa…** cria uma área com dados
+separados (catálogo, fotos, contas, sessões dos marketplaces, backups e logs); **Renomear empresa atual…** muda só o
+nome. Trocar de empresa fecha os dados da atual e abre os da outra; se houver um anúncio em execução, o MLA pede
+confirmação. A "Empresa principal" é a pasta de dados que já existia antes desta versão.
+
 ## 1. Traga a base de produtos (Importações)
 Importações → **Nova importação** → escolha o que importar (Produtos ou Compatibilidades) e o arquivo: CSV, XLSX,
 JSON, XML, PDF (tabela ou ficha técnica) ou ZIP com planilha e fotos.
@@ -23,6 +29,11 @@ situação, mídia pendente e grupo. **Novo produto** (Ctrl+N) ou clique duas ve
 Descrição, Técnico (especificações e atributos), Imagens (fotos, arquivos técnicos, mídias pendentes), Comercial
 (preços, estoque, variações), Logística, Compatibilidade e Marketplaces. O painel à direita mostra o que falta.
 Um produto fica **Pronto** com título, categoria, descrição, preço, estoque, ao menos uma imagem, peso e dimensões.
+A aba **Histórico** do editor lista cada alteração (quando, campo, antes, depois e origem: edição manual,
+importação nº ou edição em lote). Com vários produtos selecionados, **Editar em lote** muda categoria,
+subcategoria, marca, fornecedor, unidade, garantia, condição ou status comercial: primeiro **Pré-visualizar
+alterações**, depois **Aplicar** (tudo ou nada). Preço, estoque, GTIN e SKU não mudam em lote.
+**Importar e exportar → Relatório de pendências do catálogo** gera um Excel com o que falta em cada produto.
 
 ## 3. Cadastre compatibilidades (Compatibilidades)
 Informe marca, modelo, versão, anos e código de referência, com a fonte. Dados do cliente entram como
@@ -38,8 +49,12 @@ verificação de login do marketplace ainda não está mapeada, o resultado é �
 ## 5. Prepare os anúncios (Anúncios)
 No Catálogo, selecione produtos → **Preparar anúncios** → marketplace e conta. Em Anúncios, clique duas vezes para
 ajustar título, descrição, preço, estoque, categoria, atributos e imagens daquele anúncio (campos vazios usam o
-catálogo). **Aprovar** quando não houver pendências; a nota de completude sugere melhorias. **Enviar aprovados
-para a fila** só está disponível onde a automação existe (hoje, o marketplace simulado).
+catálogo). **Aprovar** quando não houver pendências; a nota de completude sugere melhorias. Um GTIN com dígito
+verificador inválido bloqueia a aprovação até ser corrigido no catálogo. **Enviar aprovados para a fila** só está
+disponível onde a automação existe (hoje, o marketplace simulado).
+**Exportar planilha** gera, para os anúncios do filtro atual, um Excel (ou CSV) com uma linha por variação, a pasta
+de fotos `<arquivo>-fotos` e as abas Pendências e Resumo. É uma planilha intermediária: confira e copie para o
+modelo oficial baixado na conta do marketplace.
 
 ## 6. Execute e revise (Automações)
 Em Automações, o MLA abre o navegador da conta, preenche o formulário e para para você conferir os valores e a

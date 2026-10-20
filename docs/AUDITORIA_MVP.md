@@ -1,6 +1,6 @@
 # Auditoria técnica do MLA para o MVP comercial
 
-**Data:** 20/10/2026 · **Base auditada:** commit `de3b310` (árvore limpa) · **Linha de base de testes:** 178 aprovados
+**Data:** 19/10/2026 · **Base auditada:** commit `de3b310` (árvore limpa) · **Linha de base de testes:** 178 aprovados
 (unidade + interface + ponta a ponta no Edge com o marketplace simulado), 0 falhos.
 
 Fontes de evidência: leitura do código, execução da suíte de testes, demonstração visual gravada de 19/10/2026
@@ -50,7 +50,7 @@ Fontes de evidência: leitura do código, execução da suíte de testes, demons
 | Licenciamento | Placeholder (não aplicado) | Sim (fluxo) | — | Chaves forjáveis (D-011) | PARCIAL | P2 |
 | Inteligência de mercado / IA | Só estrutura (contratos, tabelas) | Sim (contratos) | — | — | NÃO IMPLEMENTADO (por escopo) | P2 |
 
-## 3. Publicação e exportação: o que as plataformas oferecem hoje (pesquisa de 20/10/2026)
+## 3. Publicação e exportação: o que as plataformas oferecem hoje (pesquisa de 19/10/2026)
 - **Mercado Livre, API oficial:** publicação por `POST /items`, categoria obrigatória (ID predefinido), atributos
   obrigatórios lidos de `/categories/{id}/attributes`, GTIN condicionalmente obrigatório, **pelo menos uma foto
   obrigatória desde 23/02/2026** e um novo modelo “User Products” para desenvolvimento novo. Exige **app registrado
@@ -98,3 +98,26 @@ uma futura API/SaaS. Nenhuma migração para web será iniciada sem aprovação.
 - [Shopee: Mass Upload (Seller Education)](https://seller.shopee.sg/edu/article/7028) ·
   [guia de Mass Upload](https://cdngarenanow-a.akamaihd.net/shopee/shopee-seller-live-sg/downloads/Shopee%20Mass%20Upload%20User%20Guide%20(sg).pdf) ·
   [visão geral da Open Platform (terceiro)](https://api2cart.com/api-technology/shopee-api/)
+
+## 6. Situação depois das correções (19/10/2026, v0.2.0)
+
+| Funcionalidade | Antes | Depois | Evidência |
+|---|---|---|---|
+| Multiempresa e isolamento | NÃO IMPLEMENTADO | APROVADO | D-017; `tests/unit/test_workspaces.py`, `tests/ui/test_ui_companies.py` |
+| Correção em lote segura | NÃO IMPLEMENTADO | APROVADO | D-018; `tests/unit/test_changes.py`, `tests/ui/test_ui_bulk_edit.py` |
+| Rastreabilidade por campo | PARCIAL | APROVADO | Migração 0008; aba Histórico; 781 alterações no cenário comercial |
+| Exportação de anúncios preparados | NÃO IMPLEMENTADO | APROVADO (planilha intermediária) | D-019; `tests/unit/test_listing_export.py`; 323 linhas sem divergência no cenário |
+| Relatório para piloto | PARCIAL | APROVADO | Relatório de pendências do catálogo + modelo de relatório de piloto |
+| Reexecutar pelo Histórico | FALHANDO | APROVADO | Teste de regressão em `tests/unit/test_listings.py` |
+| Sandbox do navegador | FALHANDO | APROVADO | `chromium_sandbox=True`; testes de navegador e autoteste do exe |
+| Valores em reais no editor | PARCIAL | APROVADO | `parse_money_strict`; `tests/unit/test_units.py` |
+| Arquivos corrompidos | PARCIAL | APROVADO | 8 casos em `tests/unit/test_imports.py`; o assistente não mostra mais "erro inesperado" |
+| Logs sem segredos | PARCIAL | APROVADO (URLs) | `safe_url`; teste em `tests/unit/test_accounts.py` |
+| Falhas de rede na automação | PARCIAL | APROVADO (antes do clique de publicar) | D-020; `tests/automation/test_executor_retries.py` |
+| Dashboard / tela Concluído | PARCIAL | APROVADO | Capturas em 1366×768 e 1100×700 |
+| Empacotamento (.exe) | NÃO VERIFICADO | APROVADO nesta máquina | `tools/build_release.py`; autoteste do exe congelado |
+| Instalador / desinstalador | NÃO IMPLEMENTADO | APROVADO nesta máquina; NÃO VERIFICADO em máquina limpa | `installer/`; testes manuais registrados em `comercial/GUIA_INSTALACAO.md` |
+| Publicação real ML / Shopee | NÃO IMPLEMENTADO | NÃO VERIFICADO | Depende de autorização e conta do dono |
+
+Problemas novos encontrados pelo cenário comercial e corrigidos: sinônimos de colunas de ERP, GTIN inválido chegando
+ao anúncio, mídia pendente duplicada com caminho local, foto corrompida não registrada, título da janela repetido.

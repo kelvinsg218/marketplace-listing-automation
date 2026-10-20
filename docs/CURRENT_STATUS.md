@@ -1,37 +1,25 @@
-# Current status — 2026-10-18, v0.1.0 + phase 9 (committed 371e0f8)
+# Estado atual — 19/10/2026, v0.2.0 (missão MVP comercial)
 
-**Phases 0–3 complete; phase 9 (master catalog, import center, compatibility, listing preparation, accounts)
-implemented and tested locally.** Committed and pushed in 371e0f8. The visual showcase lives in the separate repository marketplace-listing-automation-showcase.
-Tests: 178 passed (169 fast + 9 browser/E2E in headless Edge); pyflakes clean.
-Fixed the crash found in the owner's first test (log 2026-10-13: Marketplaces "Adicionar conta" received Qt's
-`clicked(bool)` instead of the marketplace); same pattern fixed in the catalog "Adicionar ao grupo" menu.
-DB schema v7 (migrations 0003–0007 added; additive except `listings`, rebuilt with every row copied).
-Migration v2→v7 checked on a copy of the owner's real DB: accounts/settings kept, backup created, integrity ok.
+**MVP pronto para demonstração e para piloto supervisionado; não pronto para distribuição comercial.**
+Progresso item a item: [PROGRESSO_MVP.md](PROGRESSO_MVP.md). Auditoria: [AUDITORIA_MVP.md](AUDITORIA_MVP.md).
+Testes: 230 aprovados, 0 falhos (221 rápidos + 9 de ponta a ponta no Edge); pyflakes limpo. Banco: esquema v8.
 
-| Area | Status |
+| Área | Situação |
 |---|---|
-| Master catalog | Done, tested: GTIN (check digit), manufacturer code, supplier, cost/promo price, min stock, unit, commercial status, technical description, color, specs, custom attributes, manufacturer refs, internal notes, original description, source; technical files; pending (missing) media; images can carry a variation name. Optional fields only; category rules opt-in (setting `catalog.category_rules`, no UI yet) |
-| Import center | Done, tested: CSV (UTF-8/ANSI, `;` `,` tab `|`), XLSX (first sheet with data or chosen sheet), JSON (nested, MLA export with variations), XML (DOCTYPE refused), PDF (aligned table = safe, misaligned/ficha técnica = review), ZIP (safe extraction), image folder by SKU. Synonym mapping with "probable → confirm", templates, per-row validation, duplicates, field-level diff, create/update/ignore decisions, one-transaction commit (cancel = nothing written), report CSV, history, recovery after restart |
-| Compatibility | Done, tested: brand/model/version/years/reference/notes/source/verification, dedup, bulk import, page + product tab |
-| Listings (offers) | Done, tested: one listing per product × marketplace × account with overrides only; states draft → incomplete → ready for review → approved → queued → running → published confirmed / failed / needs attention; approval revoked if content changes; only approved go to the queue; executor validates and sends the effective content |
-| Accounts | Done, tested: add/edit/delete, default, active, validated seller URL (allow-listed domains), dedicated Edge profile per account, connection test (manual login, "Não verificada" when the marketplace check is not mapped) |
-| Mercado Livre real test (phase 7 of the brief) | **Blocked: needs the owner's authorization + seller URL.** No real account was opened |
-| Market intelligence / AI | Groundwork only: reference URLs + dated observations, collector contract gated by `terms_reviewed`, deterministic completeness score (shown in the listing editor), AI suggestion storage applied only when accepted, external providers blocked unless `ai.external_providers_allowed` |
-| Distribution | `mla.spec` not re-validated with openpyxl/pypdf; rebuild + `--self-test` pending |
+| Multiempresa | Feito e testado (D-017): pasta por empresa, troca no app, isolamento de catálogo, contas e sessões |
+| Importação | Feito e testado: CSV/XLSX/JSON/XML/PDF/ZIP/pasta; sinônimos de ERP ampliados; arquivos danificados recusados com mensagem; foto corrompida vira pendência; pendências sem caminho local |
+| Catálogo | Feito e testado: histórico por campo (D-018), edição em lote com prévia, valores em reais estritos no editor |
+| Anúncios | Feito e testado: GTIN inválido bloqueia aprovação; Reexecutar usa o fluxo de anúncios com a mesma trava de aprovação |
+| Exportação | Feito e testado (D-019): planilha intermediária XLSX/CSV com fotos; relatório de pendências do catálogo |
+| Automação | Feito e testado no simulado: sandbox do Edge ligado; falhas de rede repetidas antes do clique de publicar (D-020) |
+| Interface | Dashboard e tela "Concluído" da importação corrigidos para 1366×768 e 1100×700; seletor de conta; ações compactas no Catálogo |
+| Distribuição | `tools/build_release.py` + `installer/`: build 0.2.0, autoteste do exe, instalar/atualizar/abrir/fechar/desinstalar testados nesta máquina (não em máquina limpa) |
+| Cenário comercial | 300 produtos fictícios, 519 fotos, PDF e aplicações: integridade 100%, 6,6–11,9 s de processamento ([DEMO_COMERCIAL.md](DEMO_COMERCIAL.md)) |
+| Mercado Livre / Shopee reais | **Não verificados.** Nenhuma conta real foi aberta; nenhuma publicação real |
+| Inteligência de mercado / IA | Só estrutura (sem telas, sem coleta, sem IA ativa) |
 
-## Visual demo — 2026-10-19
-Full scripted demo of the real app with fictitious data (`demo/run_demo.py`, isolated data folder): 78 checks
-passed, 2 failed, 2 not executed. Details, bugs and screenshots list: [DEMO_TEST_REPORT.md](DEMO_TEST_REPORT.md).
-Bugs found: History "Reexecutar" refuses listings prepared in Anúncios; editor price field silently drops letters.
-Visual: Dashboard "Atividade recente" overlaps with 8 items at 1366×768; import "Concluído" step layout.
-Security: automation Edge runs with Playwright's default `--no-sandbox`.
-
-## Known limitations (honest)
-- Marketplace limits in `MARKETPLACE_RULES` still unconfirmed (D-009); ML/Shopee adapters still refuse to run.
-- XLSX pictures embedded in cells are not extracted; image URLs in a base are recorded as pending, not downloaded.
-- PDF: text PDFs only (no OCR); wrapped cell text in PDF tables is not joined.
-- Legacy `ImportExportService.import_csv/json` still rebuild text fields from the row (now keeps images);
-  the UI no longer uses it — the import center replaced it.
-- One listing per product per account (ML "clássico + premium" of the same product not supported yet).
-- No UI yet for: category rules, AI consent switch, market references, assigning an image to a variation.
-- UI phase 9 reviewed only through `tools/ui_snapshots.py`; owner has not used it yet.
+## Limitações conhecidas
+Lista para clientes: [comercial/LIMITACOES_CONHECIDAS.md](comercial/LIMITACOES_CONHECIDAS.md). Técnicas, além dela:
+- Limites de título/fotos em `MARKETPLACE_RULES` ainda não confirmados nos formulários reais (D-009).
+- `ImportExportService.import_csv/json` (legado) ainda existe; a interface usa a Central de Importações.
+- Licença: avaliação por banco de dados (por empresa), nada é bloqueado (D-011).

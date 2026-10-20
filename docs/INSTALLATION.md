@@ -1,14 +1,13 @@
 # Instalação
 
-## Para clientes (pasta com executável)
-1. Copie a pasta `MLA` (gerada em `dist\MLA`) para, por exemplo, `C:\Program Files\MLA` ou `%LOCALAPPDATA%\Programs\MLA`.
-2. Abra `MLA.exe`. Não é preciso Python, VS Code ou terminal.
-3. Requisitos: Windows 10/11 64 bits e Microsoft Edge (já vem no Windows). Cerca de 220 MB em disco.
+## Para clientes
+Use o pacote `MLA-<versão>-windows.zip` e siga o [guia de instalação](comercial/GUIA_INSTALACAO.md): extrair e
+executar `instalar.cmd` (por usuário, sem administrador). Programa em `%LOCALAPPDATA%\Programs\MLA`; dados em
+`%LOCALAPPDATA%\MLA` (outras empresas em `%LOCALAPPDATA%\MLA\empresas\<nome>`), nunca apagados ao atualizar ou
+desinstalar, a menos que `desinstalar.cmd -RemoverDados -ConfirmarRemocaoDeDados` seja usado.
 
-Os dados ficam em `%LOCALAPPDATA%\MLA` (banco, imagens, backups, logs, perfis de navegador). Atualizar ou
-desinstalar o programa não apaga esses dados; para removê-los, apague essa pasta.
-
-Diagnóstico: `MLA.exe --self-test` grava um relatório em `%LOCALAPPDATA%\MLA\logs\self-test.txt`.
+Diagnóstico: `MLA.exe --self-test` grava um relatório em `logs\self-test.txt` da pasta de dados (banco, recursos,
+planilhas/PDF e Edge com sandbox).
 
 ## Para desenvolvimento
 ```powershell
@@ -20,7 +19,10 @@ Navegador Chromium do Playwright é opcional (`python -m playwright install chro
 
 ## Gerar a distribuição
 ```powershell
-.venv\Scripts\pyinstaller mla.spec --noconfirm
-dist\MLA\MLA.exe --self-test
+.venv\Scripts\python tools\build_release.py
 ```
-Instalador (Inno Setup/MSIX) ainda não existe — ver NEXT_STEPS.md.
+Faz o build com PyInstaller (`mla.spec`), roda `MLA.exe --self-test` numa pasta de dados temporária e monta
+`dist\MLA-<versão>-windows.zip` (programa + `installer\*` + `VERSAO.txt`) e o `.sha256.txt`. Se o autoteste falhar,
+o pacote não é gerado. Versão 0.2.0: build em cerca de 2 minutos, pasta do programa com 219 MB, zip com 85 MB.
+
+Ainda pendente: assinatura digital de código (SmartScreen) e teste em máquina limpa.
