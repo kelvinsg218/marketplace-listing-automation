@@ -32,6 +32,7 @@ from mla.services.settings import SettingsService
 
 if TYPE_CHECKING:
     from mla.importing.service import ImportService
+    from mla.integrations.mercadolivre import MercadoLivreService
 
 log = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ class AppContext:
     quality: ListingQualityService | None = None
     suggestions: SuggestionService | None = None
     imports: "ImportService | None" = None
+    mercadolivre: "MercadoLivreService | None" = None
     recovered_imports: int = 0
 
     @classmethod
@@ -92,6 +94,8 @@ class AppContext:
             market=MarketService(db), quality=ListingQualityService(listings, products, compat_repo.confirmed_count),
             suggestions=SuggestionService(db, listings, settings),
         )
+        from mla.integrations.mercadolivre import MercadoLivreService
+        ctx.mercadolivre = MercadoLivreService(db, accounts)
         from mla.importing.service import ImportService  # importing depends on the services above
         from mla.persistence.imports import ImportRepository
         ctx.imports = ImportService(ImportRepository(db), ctx)

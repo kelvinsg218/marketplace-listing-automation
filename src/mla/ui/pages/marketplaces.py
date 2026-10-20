@@ -33,8 +33,9 @@ from mla.ui.workers import TaskRunner
 log = logging.getLogger(__name__)
 MARKETPLACES = (Marketplace.MERCADO_LIVRE, Marketplace.SHOPEE, Marketplace.SIMULATED)
 NOTES = {
-    Marketplace.MERCADO_LIVRE: "Cadastre a URL da sua loja ou do painel de vendedor. O preenchimento automático do "
-                               "formulário real ainda depende da inspeção autorizada da sua conta.",
+    Marketplace.MERCADO_LIVRE: "Conecte a conta pela API oficial (botão API oficial) para importar seus anúncios, "
+                               "sugerir categorias e validar anúncios sem publicar. A publicação pelo MLA ainda não "
+                               "está liberada: depende da sua autorização e de um teste supervisionado.",
     Marketplace.SHOPEE: "Cadastre a URL da Central do Vendedor. O preenchimento automático do formulário real ainda "
                         "está em desenvolvimento.",
     Marketplace.SIMULATED: "Marketplace local para testar o fluxo completo (login, preenchimento, revisão e "
@@ -332,10 +333,18 @@ class MarketplacesPage(Page):
         status_label = label(status_line, role="hint")
         status_label.setToolTip(account.connection_message)
         text.addWidget(status_label)
+        official = account.marketplace is Marketplace.MERCADO_LIVRE and self.ctx.mercadolivre is not None
+        if official:
+            from mla.ui.pages.ml_tools import connection_text
+            text.addWidget(label(connection_text(self.ctx, account), role="hint"))
         row.addLayout(text, 1)
         chip = StatusChip(account.connection_status)
         chip.setToolTip(account.connection_message)
         row.addWidget(chip)
+        if official:
+            row.addWidget(button("API oficial", "secondary", "key-round",
+                                 lambda _checked=False, a=account: self._connect_api(a),
+                                 "Conectar esta conta pela API oficial do Mercado Livre (OAuth)."))
         row.addWidget(button("Testar conexão", "secondary", "plug", lambda _checked=False, a=account: self._test(a)))
         row.addWidget(button("Abrir navegador", "ghost", "log-in", lambda _checked=False, a=account: self._open_login(a),
                              "Abre o perfil dedicado desta conta para você entrar manualmente."))
@@ -348,11 +357,45 @@ class MarketplacesPage(Page):
         if site_for(account.marketplace).listing_entry_mapped:
             menu.addAction("Verificar acesso à criação de anúncios",
                            lambda _checked=False, a=account: self._test(a, probe_listing=True))
+        if official and self.ctx.mercadolivre.connection(account.id) is not None:
+            menu.addSeparator()
+            menu.addAction("Verificar API oficial", lambda _checked=False, a=account: self._check_api(a))
+            menu.addAction("Importar anúncios desta conta para o catálogo…",
+                           lambda _checked=False, a=account: self._import_api(a))
+            menu.addAction("Desconectar API oficial", lambda _checked=False, a=account: self._disconnect_api(a))
         menu.addSeparator()
         menu.addAction("Excluir conta…", lambda _checked=False, a=account: self._delete(a))
         more.setMenu(menu)
         row.addWidget(more)
         return row
+
+    # ------------------------------------------------------------------ official API (Mercado Livre)
+    def _connect_api(self, account: MarketplaceAccount) -> None:
+        from mla.ui.pages.ml_tools import MLConnectDialog
+        dialog = MLConnectDialog(self.ctx, account, self)
+        dialog.exec()
+        self.refresh()
+
+    def _check_api(self, account: MarketplaceAccount) -> None:
+        from mla.integrations.mercadolivre import MLApiError
+        try:
+            connection = self.ctx.mercadolivre.check(account.id)
+        except MLApiError as exc:
+            inform(self, "API oficial do Mercado Livre", str(exc), error=True)
+        else:
+            show_toast(self, f"API oficial conectada como {connection.nickname}.", "success")
+        self.refresh()
+
+    def _import_api(self, account: MarketplaceAccount) -> None:
+        from mla.ui.pages.ml_tools import import_ml_listings
+        import_ml_listings(self, account)
+
+    def _disconnect_api(self, account: MarketplaceAccount) -> None:
+        if confirm(self, "Desconectar API oficial", "Apagar deste computador os códigos de acesso da API desta conta? "
+                   "Para revogar também no Mercado Livre, use Minha conta → Segurança → Aplicativos conectados.",
+                   "Desconectar", danger=True):
+            self.ctx.mercadolivre.disconnect(account.id)
+            self.refresh()
 
     # ------------------------------------------------------------------ actions
     def _add(self, marketplace: Marketplace | None) -> None:

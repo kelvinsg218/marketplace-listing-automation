@@ -243,6 +243,10 @@ class ListingEditor(QDialog):
         self.issue_box = QVBoxLayout()
         self.issue_box.setSpacing(6)
         side.addLayout(self.issue_box)
+        if listing.marketplace is Marketplace.MERCADO_LIVRE and getattr(ctx, "mercadolivre", None) is not None:
+            from mla.ui.pages.ml_tools import MLListingTools
+            self.ml_tools = MLListingTools(self)
+            side.addWidget(self.ml_tools)
         side.addStretch(1)
         holder = QWidget()
         holder.setLayout(side)
