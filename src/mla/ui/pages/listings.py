@@ -7,11 +7,13 @@ can be sent to the automation queue, and only a confirmed publication marks one 
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime
+from pathlib import Path
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter
 from PySide6.QtWidgets import (
-    QAbstractItemView, QComboBox, QDialog, QHBoxLayout, QHeaderView, QLineEdit, QListWidget, QListWidgetItem,
+    QAbstractItemView, QApplication, QComboBox, QDialog, QFileDialog, QHBoxLayout, QHeaderView, QLineEdit, QListWidget, QListWidgetItem,
     QPlainTextEdit, QStackedLayout, QStyledItemDelegate, QTableView, QTableWidget, QTableWidgetItem, QVBoxLayout,
     QWidget,
 )
@@ -21,6 +23,7 @@ from mla.core.enums import ListingStatus, Marketplace
 from mla.core.models import Listing, ListingRow
 from mla.core.units import ParseError, format_money, parse_money_strict
 from mla.core.validation import MARKETPLACE_RULES
+from mla.services.listing_export import NOTICE, ListingExporter
 from mla.services.listings import ListingError
 from mla.ui.icons import icon, pixmap
 from mla.ui.pages.base import Page
@@ -519,6 +522,7 @@ class ListingsPage(Page):
         super().__init__(ctx, navigate, parent)
         self.services = services
         self.send_btn = button("Enviar aprovados para a fila", "primary", "send", self._send)
+        self.header.add_action(button("Exportar planilha", "secondary", "download", self._export))
         self.header.add_action(button("Preparar do catálogo", "secondary", "tag",
                                       lambda: self.navigate("products")))
         self.header.add_action(self.send_btn)
@@ -713,6 +717,31 @@ class ListingsPage(Page):
         rows = self._selected()
         if len(rows) == 1:
             self.navigate("products", product_id=rows[0].listing.product_id)
+
+    def _export(self) -> None:
+        """Intermediate spreadsheet of the listings in the current filter (one row per variation + photos)."""
+        marketplace = Marketplace(self.marketplace.currentData())
+        account_id = self.account.currentData()
+        statuses = FILTERS[self.status_filter.currentIndex()][1]
+        rows = self.ctx.listings.rows(marketplace, account_id, statuses, self.search.text(), limit=10_000)
+        if not rows:
+            inform(self, "Exportar planilha", "Nenhum anúncio no filtro atual.")
+            return
+        default = self.ctx.paths.exports / f"anuncios-{marketplace.value}-{datetime.now():%Y-%m-%d}.xlsx"
+        path, _ = QFileDialog.getSaveFileName(self, "Exportar anúncios", str(default),
+                                              "Planilha Excel (*.xlsx);;Planilha CSV (*.csv)")
+        if not path:
+            return
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            result = ListingExporter(self.ctx).export_listings([r.listing for r in rows], Path(path))
+        except (OSError, ValueError) as exc:
+            QApplication.restoreOverrideCursor()
+            inform(self, "Não foi possível exportar", str(exc), error=True)
+            return
+        QApplication.restoreOverrideCursor()
+        where = f"\nFotos: {result.photos_dir}" if result.photos_dir else ""
+        inform(self, "Planilha exportada", f"{result.summary()}\n\nArquivo: {path}{where}\n\n{NOTICE}")
 
     def _send(self) -> None:
         marketplace = Marketplace(self.marketplace.currentData())

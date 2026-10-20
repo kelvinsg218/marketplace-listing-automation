@@ -87,3 +87,11 @@ isolation by folder is simpler to audit, back up and hand over to a client.
 characters; rows survive product deletion (product_id NULL, SKU kept). Bulk edit only touches descriptive fields
 (categoria, subcategoria, marca, fornecedor, unidade, garantia, condição, status comercial); price, stock, GTIN and
 SKU are never changed in bulk. It always shows a preview first and writes all-or-nothing in one transaction.
+
+**D-019 (2026-10-19) Export = intermediate validated spreadsheet.** `services/listing_export.py` writes the listings
+of the current filter to XLSX (sheets Anúncios / Pendências / Resumo) or CSV: one row per variation, columns named
+after the usual marketplace fields, photos copied to `<arquivo>-fotos/` as `<SKU>-NN.ext`, only confirmed
+compatibilities (unverified ones are counted, not exported), empty data left empty. It is explicitly not the official
+ML/Shopee bulk template (generated per category in the seller account); mapping to it is a supervised step.
+Formula injection is neutralised (XLSX cells forced to text, CSV cells prefixed with '). The same writer produces
+the catalog pending-issues report for the client.

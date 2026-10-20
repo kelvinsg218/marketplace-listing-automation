@@ -18,7 +18,7 @@ from mla.ui.icons import icon
 from mla.ui.pages.base import Page
 from mla.ui.theme import T, tone_for
 from mla.ui.widgets.common import (
-    EmptyState, button, confirm, format_when, label, paint_chip, plural, show_toast, thumbnail,
+    EmptyState, button, confirm, format_when, inform, label, paint_chip, plural, show_toast, thumbnail,
 )
 
 COLUMNS = [("Produto", "internal_name"), ("Status", "status"), ("Preço", "price_cents"),
@@ -184,6 +184,8 @@ class ProductsPage(Page):
         io_menu.addSeparator()
         io_menu.addAction("Exportar CSV…", lambda: self._export("csv"))
         io_menu.addAction("Exportar JSON (completo, com variações)…", lambda: self._export("json"))
+        io_menu.addSeparator()
+        io_menu.addAction("Relatório de pendências do catálogo (XLSX)…", self._export_issues)
         io_btn = button("Importar e exportar", "secondary", "download")
         io_btn.setMenu(io_menu)
         self.header.add_action(io_btn)
@@ -462,6 +464,24 @@ class ProductsPage(Page):
             marketplace, account_id, result = dialog.result_info
             show_toast(self, result.summary(), "success" if result.created else "neutral")
             self.navigate("listings", marketplace=marketplace, account_id=account_id)
+
+    def _export_issues(self) -> None:
+        """What is still missing in the catalog, product by product (to send back to the client)."""
+        from datetime import datetime
+
+        from mla.services.listing_export import ListingExporter
+        default = self.ctx.paths.exports / f"pendencias-catalogo-{datetime.now():%Y-%m-%d}.xlsx"
+        path, _ = QFileDialog.getSaveFileName(self, "Relatório de pendências do catálogo", str(default),
+                                              "Planilha Excel (*.xlsx);;Planilha CSV (*.csv)")
+        if not path:
+            return
+        try:
+            result = ListingExporter(self.ctx).export_catalog_issues(Path(path))
+        except (OSError, ValueError) as exc:
+            inform(self, "Não foi possível exportar", str(exc), error=True)
+            return
+        show_toast(self, f"{result.rows} pendência(s) de {result.listings} produto(s); "
+                   f"{result.with_errors} produto(s) com pendência bloqueante.", "success")
 
     def _export(self, kind: str, ids: list[int] | None = None) -> None:
         default = str(self.ctx.paths.exports / f"catalogo.{kind}")
