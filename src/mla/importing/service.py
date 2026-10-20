@@ -1112,10 +1112,10 @@ def _attach_media(product: Product, media: list[dict[str, str]], stored, origin:
                   variant: str = "") -> int:
     known_images = {i.sha256 for i in product.images}
     known_files = {f.sha256 for f in product.files}
-    pending = {m.reference.lower() for m in product.missing_media}
+    pending = {_media_name(m.reference) for m in product.missing_media}
     added = 0
     for m in media:
-        ref_name = Path(m["ref"].replace("\\", "/")).name.lower()
+        ref_name = _media_name(m["ref"])
         item = stored.get(m["path"]) if m.get("status") == "found" else None
         if item is not None:
             if m["kind"] == "image" and item.sha256 not in known_images:
@@ -1131,11 +1131,23 @@ def _attach_media(product: Product, media: list[dict[str, str]], stored, origin:
                 added += 1
             product.missing_media = [x for x in product.missing_media
                                      if Path(x.reference.replace("\\", "/")).name.lower() != ref_name]
-        elif m["ref"].lower() not in pending:
-            product.missing_media.append(MissingMedia(m["ref"], "image" if m["kind"] == "image" else "file", origin))
-            pending.add(m["ref"].lower())
+        elif ref_name not in pending:
+            # the same file may be cited by name in one import and by full path in another: one pending entry,
+            # and never a local absolute path in the product (reports go to clients)
+            reference = Path(m["ref"].replace("\\", "/")).name if _local_absolute(m["ref"]) else m["ref"]
+            product.missing_media.append(MissingMedia(reference, "image" if m["kind"] == "image" else "file", origin))
+            pending.add(ref_name)
             counts["missing_media"] += 1
     return added
+
+
+def _media_name(reference: str) -> str:
+    return Path(reference.replace("\\", "/")).name.lower()
+
+
+def _local_absolute(reference: str) -> bool:
+    text = reference.replace("\\", "/")
+    return bool(re.match(r"^[a-zA-Z]:/", text)) or text.startswith("//") or (text.startswith("/") and "://" not in text)
 
 
 def _commit_message(counts: dict[str, int]) -> str:

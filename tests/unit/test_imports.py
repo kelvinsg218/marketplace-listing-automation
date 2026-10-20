@@ -536,3 +536,31 @@ def test_legacy_csv_update_keeps_images_and_exports_master_fields(ctx, complete_
     assert result.updated == 1
     after = ctx.products.get(product.id)
     assert after.price_cents == 15000 and len(after.images) == 1, "update by file must not drop images"
+
+
+def test_pending_media_is_deduplicated_by_name_and_never_stores_local_paths():
+    from mla.core.models import Product
+    from mla.importing.service import _attach_media
+    product = Product(internal_name="Filtro", sku="PM-1")
+    counts = {"images": 0, "missing_media": 0}
+    _attach_media(product, [{"ref": "fotos/PM-1_9.jpg", "kind": "image", "path": "", "status": "missing"}], {},
+                  "Importação #1", counts)
+    _attach_media(product, [{"ref": r"C:\Users\cliente\fotos\PM-1_9.jpg", "kind": "image", "path": "",
+                             "status": "missing"}], {}, "Importação #2", counts)
+    _attach_media(product, [{"ref": r"D:\Base\PM-1_3.jpg", "kind": "image", "path": "", "status": "missing"}], {},
+                  "Importação #3", counts)
+    assert [m.reference for m in product.missing_media] == ["fotos/PM-1_9.jpg", "PM-1_3.jpg"]
+    assert counts["missing_media"] == 2
+
+
+def test_alternative_erp_column_names_are_recognised():
+    from mla.importing.mapping import suggest_mapping
+    headers = ["Cód. Produto", "Descrição do item", "Título para anúncio", "Comp (cm)", "Larg (cm)", "Alt (cm)",
+               "Qtd Estoque"]
+    found = {s.column: (s.field, s.confidence) for s in suggest_mapping(headers, [])}
+    assert found["Descrição do item"] == ("internal_name", "probable")  # the user confirms it
+    assert found["Título para anúncio"][0] == "title"
+    assert [found[h][0] for h in ("Comp (cm)", "Larg (cm)", "Alt (cm)")] == ["length_cm", "width_cm", "height_cm"]
+    compat = {s.column: s.field for s in suggest_mapping(["Marca do veículo", "Modelo do veículo"], [],
+                                                          "compatibility")}
+    assert compat == {"Marca do veículo": "brand", "Modelo do veículo": "model"}

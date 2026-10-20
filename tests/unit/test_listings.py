@@ -173,3 +173,13 @@ def test_rerun_from_history_uses_listing_flow_and_keeps_approval_guard(ctx, comp
     ctx.catalog.save(product)
     blocked = queue.requeue_item(item.id, ctx.listings.rerun_block_reason)
     assert blocked.queued == 0 and "aprove de novo" in blocked.skipped[0].reason
+
+
+def test_invalid_gtin_is_kept_in_catalog_but_blocks_the_listing(ctx, complete_product, sim_account):
+    product, listing = _prepared(ctx, complete_product, sim_account, "L-13", gtin="7891234567890")  # bad digit
+    assert ctx.catalog.get(product.id).gtin == "7891234567890"  # client data preserved
+    assert listing.status is ListingStatus.INCOMPLETE
+    assert ctx.listings.approve([listing.id]).approved == []
+    product.gtin = "7891234567895"
+    ctx.catalog.save(product)
+    assert ctx.listings.get(listing.id).status is ListingStatus.READY

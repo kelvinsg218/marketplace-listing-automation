@@ -18,7 +18,7 @@ from mla.automation.base import ListingPayload
 from mla.automation.payload import build_payload
 from mla.core.enums import CatalogStatus, ListingStatus, Marketplace
 from mla.core.models import Listing, ListingRow, Product
-from mla.core.validation import MARKETPLACE_RULES, ValidationReport
+from mla.core.validation import MARKETPLACE_RULES, ValidationReport, gtin_valid
 from mla.persistence.db import now_iso
 from mla.persistence.listings import ListingExistsError, ListingRepository
 from mla.persistence.repositories import AccountRepository, ProductRepository
@@ -78,6 +78,11 @@ class ListingService:
             if issue.marketplace is not None and issue.marketplace is not marketplace:
                 continue
             report.issues.append(issue)
+        if product.gtin and not gtin_valid(product.gtin):
+            # kept in the catalog as the client sent it, but never sent to a marketplace
+            report.issues = [i for i in report.issues if i.field != "gtin"]
+            report.add("gtin", f"GTIN/EAN {product.gtin} com dígito verificador inválido: corrija no catálogo ou "
+                               "apague o código antes de aprovar o anúncio.")
         if not payload.title:
             report.add("title", "Escreva o título do anúncio.")
         rules = MARKETPLACE_RULES.get(marketplace)
