@@ -95,3 +95,8 @@ compatibilities (unverified ones are counted, not exported), empty data left emp
 ML/Shopee bulk template (generated per category in the seller account); mapping to it is a supervised step.
 Formula injection is neutralised (XLSX cells forced to text, CSV cells prefixed with '). The same writer produces
 the catalog pending-issues report for the client.
+
+**D-020 (2026-10-19) Network failures in automation.** Playwright network errors (`net::ERR_*`, `NS_ERROR_*`) are
+retried like timeouts, within the same `automation.max_retries`, only in steps that go through `_attempt` (open
+form, fill fields, upload images). The publish click and the confirmation are never retried; an error there still
+ends in "Verificar manualmente". Other browser errors (closed page, crashes) are not retried blindly.

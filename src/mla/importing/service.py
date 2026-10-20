@@ -244,7 +244,10 @@ class ImportService:
         path = Path(path)
         if path.is_dir():
             return self.analyze_image_folder(path)
-        fmt = detect_format(path)
+        try:
+            fmt = detect_format(path)
+        except SourceError as exc:  # empty, damaged or unsupported file: a message for the user, not a crash
+            raise ImportProblem(str(exc)) from exc
         analysis = Analysis(path=path, format=fmt, target=target, sha256=_sha256(path))
         if fmt == "zip":
             staging = self.ctx.paths.imports / f"zip-{uuid.uuid4().hex[:12]}"
@@ -708,6 +711,9 @@ class ImportService:
                 media.append(entry)
             known = {i.sha256 for i in product.images}
             new = [m for m in media if m["status"] == "found" and m["sha256"] not in known]
+            # a damaged file must still be recorded as pending media (the client has to send it again)
+            pending = {_media_name(m.reference) for m in product.missing_media}
+            new += [m for m in media if m["status"] == "invalid" and _media_name(m["ref"]) not in pending]
             issues: list[dict[str, str]] = []
             _media_issues(media, issues)
             action = ImportAction.UPDATE if new else ImportAction.UNCHANGED

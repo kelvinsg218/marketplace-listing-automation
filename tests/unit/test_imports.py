@@ -564,3 +564,40 @@ def test_alternative_erp_column_names_are_recognised():
     compat = {s.column: s.field for s in suggest_mapping(["Marca do veículo", "Modelo do veículo"], [],
                                                           "compatibility")}
     assert compat == {"Marca do veículo": "brand", "Modelo do veículo": "model"}
+
+
+# ------------------------------------------------------------------ damaged and unexpected files
+@pytest.mark.parametrize("name, content", [
+    ("corrompido.xlsx", b"PK\x03\x04 isto nao e uma planilha"),
+    ("aleatorio.xlsx", bytes(range(256)) * 20),
+    ("corrompido.pdf", b"%PDF-1.4\n1 0 obj << /Type /Catalog >> lixo sem xref"),
+    ("vazio.csv", b""),
+    ("so-cabecalho.csv", "codigo;descricao;preco\n".encode()),
+    ("truncado.zip", b"PK\x03\x04\x14\x00\x00\x00\x08\x00"),
+    ("documento.docx", b"PK\x03\x04qualquer"),
+    ("binario.json", b"\x00\x01\x02{\"a\":"),
+], ids=lambda value: value if isinstance(value, str) else "")
+def test_damaged_or_unsupported_files_are_refused_with_a_message(ctx, tmp_path, name, content):
+    from mla.importing.service import ImportProblem
+    path = tmp_path / name
+    path.write_bytes(content)
+    with pytest.raises(ImportProblem) as info:
+        ctx.imports.analyze(path)
+    assert str(info.value).strip()
+    assert ctx.catalog.search() == []
+
+
+def test_corrupted_image_in_folder_does_not_stop_the_others(ctx, tmp_path):
+    for sku in ("IMG-1", "IMG-2"):
+        ctx.catalog.save(Product(internal_name=f"Produto {sku}", sku=sku))
+    folder = tmp_path / "fotos"
+    make_png(folder / "IMG-1.png", 800, 800)
+    (folder / "IMG-2.jpg").write_bytes(b"nao e imagem")
+    analysis = ctx.imports.analyze_image_folder(folder)
+    batch = ctx.imports.plan(analysis, {})
+    report = ctx.imports.commit(batch.id)
+    assert report.counts["images"] == 1
+    good = ctx.catalog.get(ctx.products.id_for_sku("IMG-1"))
+    bad = ctx.catalog.get(ctx.products.id_for_sku("IMG-2"))
+    assert len(good.images) == 1 and not bad.images
+    assert [m.reference for m in bad.missing_media] == ["IMG-2.jpg"]  # no local path stored

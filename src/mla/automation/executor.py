@@ -72,6 +72,15 @@ class _Stopped(Exception):
     pass
 
 
+_NETWORK_MARKERS = ("net::err_", "ns_error_net", "ns_error_unknown_host", "ns_error_connection")
+
+
+def _network_error(exc: Exception) -> bool:
+    """Connection lost, DNS or proxy failures: safe to retry a step before the publish click."""
+    text = str(exc).lower()
+    return any(marker in text for marker in _NETWORK_MARKERS)
+
+
 class ExecutionManager:
     def __init__(self, ctx, queue: QueueManager, hooks: ExecutionHooks | None = None, headless: bool = False):
         self.ctx = ctx
@@ -280,20 +289,24 @@ class ExecutionManager:
 
     def _attempt(self, item: JobItem, logger: ExecutionLogger, adapter: BaseMarketplaceAdapter, action) -> None:
         """Run one step with controlled retries; pause for manual action when the site asks for a human."""
-        from playwright.sync_api import TimeoutError as PlaywrightTimeout
+        from playwright.sync_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeout
         retries = int(self._settings("automation.max_retries"))
         failures = 0
         while True:
             try:
                 self._with_manual(item, logger, adapter, lambda: (adapter.check_blockers(), action()))
                 return
-            except (PlaywrightTimeout, StepError) as exc:
+            except (PlaywrightError, StepError) as exc:
                 if isinstance(exc, StepError) and not exc.retryable:
                     raise
+                network = isinstance(exc, PlaywrightError) and _network_error(exc)
+                if isinstance(exc, PlaywrightError) and not isinstance(exc, PlaywrightTimeout) and not network:
+                    raise  # other browser errors are not retried blindly
                 failures += 1
                 if failures > retries:
-                    raise StepError(f"Etapa falhou após {failures} tentativas: {str(exc).splitlines()[0]}",
-                                    retryable=False) from exc
+                    reason = "falha de rede" if network else "tempo esgotado ou erro na etapa"
+                    raise StepError(f"Etapa falhou após {failures} tentativas ({reason}): "
+                                    f"{str(exc).splitlines()[0][:200]}", retryable=False) from exc
                 logger.warning(f"Tentativa {failures} falhou; repetindo a etapa. ({str(exc).splitlines()[0][:200]})")
 
     def _with_manual(self, item: JobItem, logger: ExecutionLogger, adapter: BaseMarketplaceAdapter, action) -> None:
