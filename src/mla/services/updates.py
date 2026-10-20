@@ -27,8 +27,9 @@ from mla.config.version import VersionError, is_newer, parse_version
 
 log = logging.getLogger(__name__)
 
-# Public releases-only repository (the source code stays private). Must exist before updates work.
-DEFAULT_FEED = "https://api.github.com/repos/kelvinsg218/mla-releases/releases"
+# Releases of the PUBLIC showcase repository carry only the installer and its SHA-256 (no source code); the
+# main repository stays private and no token is ever shipped. Releases without an MLA-Setup asset are ignored.
+DEFAULT_FEED = "https://api.github.com/repos/kelvinsg218/marketplace-listing-automation-showcase/releases"
 SETUP_ASSET = re.compile(r"^MLA-Setup-(?P<version>[0-9A-Za-z.\-]+)\.exe$")
 MAX_DOWNLOAD = 600 * 1024 * 1024
 CHANNEL_FILE = "canal.json"  # optional override: {"feed_url": "...", "include_prereleases": true}

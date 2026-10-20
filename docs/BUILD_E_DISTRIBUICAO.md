@@ -41,10 +41,13 @@ Tempos medidos (0.1.0-beta, esta máquina): programa 124 s, instalador 106 s; in
 - Log: `%LOCALAPPDATA%\MLA\logs\instalador.log`.
 
 ## Atualizações
-- O app consulta um feed no formato da API do GitHub Releases. Padrão:
-  `https://api.github.com/repos/kelvinsg218/mla-releases/releases` — **um repositório público só com os
-  instaladores**, porque o repositório do código é privado e o app não pode carregar token. Esse repositório
-  ainda **não existe**: precisa ser criado pelo dono (ação externa, depende de aprovação).
+- O app consulta um feed no formato da API do GitHub Releases. Padrão (desde a 0.1.2-beta):
+  `https://api.github.com/repos/kelvinsg218/marketplace-listing-automation-showcase/releases` — as **releases do
+  repositório público de apresentação**. Elas carregam só o instalador e o SHA-256; o código-fonte fica no
+  repositório principal, que continua privado (o GitHub não permite que um app baixe releases de repositório
+  privado sem token, e nenhum token é embutido no app). Releases sem `MLA-Setup-<versão>.exe` são ignoradas.
+- A 0.1.1-beta procurava um repositório `mla-releases` que não será criado: quem a instalou atualiza instalando a
+  0.1.2-beta por cima (dados mantidos).
 - Uma versão é instalável só se tiver o arquivo `MLA-Setup-<versão>.exe` e o SHA-256 (campo `digest` do GitHub ou
   arquivo `MLA-Setup-<versão>.exe.sha256`). Download em `%LOCALAPPDATA%\MLA\atualizacoes`, conferido antes de
   executar; arquivo divergente é apagado e nada é instalado. Só HTTPS (ou `127.0.0.1` para testes).
@@ -55,11 +58,17 @@ Tempos medidos (0.1.0-beta, esta máquina): programa 124 s, instalador 106 s; in
 - Canal alternativo: `%LOCALAPPDATA%\MLA\atualizacoes\canal.json` com `{"feed_url": "...",
   "include_prereleases": true}` ou a variável `MLA_UPDATE_FEED` (testes).
 
-### Publicar uma versão (quando o repositório público existir)
-1. Gerar a versão (seção acima).
-2. Criar a release `v<versão>` no repositório público (marcar "pre-release" para betas) e anexar
-   `MLA-Setup-<versão>.exe` e `MLA-Setup-<versão>.exe.sha256`.
-3. Abrir o MLA instalado → Atualizações → Verificar agora.
+### Publicar uma versão
+1. Gerar a versão (seção acima) e rodar a suíte de testes.
+2. No GitHub, no repositório **marketplace-listing-automation-showcase** → Releases → **Draft a new release**:
+   tag `v<versão>` (ex.: `v0.1.2-beta`), título `MLA <versão>`, texto de `dist\release-notes-<versão>.md`,
+   marcar **Set as a pre-release** para betas, anexar `MLA-Setup-<versão>.exe` e `MLA-Setup-<versão>.exe.sha256`
+   (arquivos de release aceitam até 2 GB; o instalador tem ~130 MB e não pode ir como arquivo no Git, que limita a
+   100 MB por arquivo). **Publish release**.
+3. Conferir: `https://api.github.com/repos/kelvinsg218/marketplace-listing-automation-showcase/releases` deve
+   listar a versão; no MLA instalado, Atualizações → Verificar agora.
+
+Não anexe outros arquivos do projeto à release (nada de `dist\MLA`, `build\`, bancos ou logs).
 
 ## Limitações conhecidas
 - Sem assinatura digital: o Windows SmartScreen pode avisar no primeiro uso do instalador. O SHA-256 garante que

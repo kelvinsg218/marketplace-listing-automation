@@ -8,7 +8,7 @@ Apresentação visual (capturas de tela e página para portfólio): repositório
 [marketplace-listing-automation-showcase](https://github.com/kelvinsg218/marketplace-listing-automation-showcase).
 
 ## Status
-v0.1.1-beta: aplicativo Windows instalável (`MLA-Setup-<versão>.exe`, por usuário) com atualização pelo próprio
+v0.1.2-beta: aplicativo Windows instalável (`MLA-Setup-<versão>.exe`, por usuário) com atualização pelo próprio
 app e conexão ao **Mercado Livre pela API oficial** (importar anúncios, sugerir categoria, conferir atributos e
 validar sem publicar). 256 testes automatizados aprovados (unidade, interface e ponta a ponta no Edge com o
 marketplace simulado) e um cenário de 300 produtos fictícios medido ([docs/DEMO_COMERCIAL.md](docs/DEMO_COMERCIAL.md)).

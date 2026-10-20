@@ -5,15 +5,15 @@ e envie de volta junto com a pasta `%LOCALAPPDATA%\MLA\logs` compactada (os logs
 
 ## Antes de começar
 - Windows 10 ou 11 (64 bits), com Microsoft Edge.
-- Receba **dois arquivos**: `MLA-Setup-0.1.1-beta.exe` e `MLA-Setup-0.1.1-beta.exe.sha256`.
+- Receba **dois arquivos**: `MLA-Setup-0.1.2-beta.exe` e `MLA-Setup-0.1.2-beta.exe.sha256`.
 - Confira o arquivo no PowerShell (Iniciar → digite PowerShell):
   ```
-  Get-FileHash "$env:USERPROFILE\Downloads\MLA-Setup-0.1.1-beta.exe" -Algorithm SHA256
+  Get-FileHash "$env:USERPROFILE\Downloads\MLA-Setup-0.1.2-beta.exe" -Algorithm SHA256
   ```
   O código mostrado deve ser igual ao que está dentro do `.sha256`. Se for diferente, **não instale**.
 
 ## Passos
-1. **Instalar:** dê dois cliques no `MLA-Setup-0.1.1-beta.exe`. Se aparecer "O Windows protegeu o computador",
+1. **Instalar:** dê dois cliques no `MLA-Setup-0.1.2-beta.exe`. Se aparecer "O Windows protegeu o computador",
    clique em **Mais informações → Executar assim mesmo** (o instalador ainda não tem assinatura digital).
    Marque "Criar atalho na área de trabalho" se quiser e clique em **Instalar**. Não precisa ser administrador.
 2. **Primeira abertura:** o MLA abre sozinho no fim. Anote se abriu e quanto tempo levou.

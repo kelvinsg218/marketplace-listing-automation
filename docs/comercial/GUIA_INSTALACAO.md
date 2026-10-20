@@ -45,6 +45,6 @@ Os dados são mantidos. Para apagar também os dados de todas as empresas (irrev
 Nesta máquina de desenvolvimento (Windows 11), com o instalador real: instalação em modo silencioso, primeira
 abertura sem terminal, abertura com 288 produtos fictícios, **atualização 0.1.0-beta → 0.1.1-beta clicando na
 própria interface** (janela de progresso do instalador, dados idênticos, backup antes da migração do banco 8 → 9),
-desinstalação mantendo os dados, e os dados reais da máquina conferidos sem alteração. Ainda não verificados com
-o `MLA-Setup.exe`: a janela de instalação normal (assistente) e a recusa de instalar com o MLA aberto.
+desinstalação mantendo os dados, e os dados reais da máquina conferidos sem alteração. Com a 0.1.2-beta também foram
+testados o assistente de instalação e a recusa de instalar com o MLA aberto.
 **Ainda não testado em um computador limpo**: use o [roteiro do segundo computador](../ROTEIRO_TESTE_SEGUNDO_COMPUTADOR.md).
