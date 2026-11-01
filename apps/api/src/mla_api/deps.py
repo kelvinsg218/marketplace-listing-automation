@@ -14,6 +14,7 @@ from mla_api.db import as_aware, set_tenant, utcnow
 from mla_api.models import AuthSession, Membership, Organization, User
 from mla_api.security import has_permission, hash_token
 from mla_api.settings import Settings
+from mla_api.storage import Storage
 
 
 def get_settings_dep(request: Request) -> Settings:
@@ -60,6 +61,7 @@ class OrgContext:
     membership: Membership
     user: User
     db: Session
+    storage: Storage
 
     @property
     def org_id(self) -> uuid.UUID:
@@ -70,14 +72,16 @@ class OrgContext:
         return self.membership.role
 
 
-def org_context(org_id: uuid.UUID, auth: Auth = Depends(current_auth), db: Session = Depends(get_db)) -> OrgContext:
+def org_context(org_id: uuid.UUID, request: Request, auth: Auth = Depends(current_auth),
+                db: Session = Depends(get_db)) -> OrgContext:
     membership = db.scalar(select(Membership).where(Membership.organization_id == org_id,
                                                     Membership.user_id == auth.user.id))
     if membership is None:
         # 404, not 403: a non-member must not learn whether the organization exists.
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Organização não encontrada.")
     set_tenant(db, org_id)
-    return OrgContext(org=membership.organization, membership=membership, user=auth.user, db=db)
+    return OrgContext(org=membership.organization, membership=membership, user=auth.user, db=db,
+                      storage=request.app.state.storage)
 
 
 def require(permission: str) -> Callable[..., OrgContext]:

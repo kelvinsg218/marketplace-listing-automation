@@ -9,6 +9,7 @@ import { when } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/use-api";
 import { draftFrom, type DraftErrors, ProductFields, toPayload } from "@/components/product-form";
+import { MercadoLivreCard, PhotosCard, VariantsCard } from "@/components/product-extras";
 import { Alert, Button, Card, cx, PageHeader, Skeleton } from "@/components/ui";
 
 const SEVERITY = {
@@ -105,7 +106,7 @@ function Editor({ product, onSaved }: { product: Product; onSaved: (p: Product) 
 }
 
 function ProductDetail() {
-  const { org } = useSession();
+  const { org, role } = useSession();
   const id = useSearchParams().get("id");
   const { data, error, loading, setData } = useApi<Product>(org && id ? `/orgs/${org.id}/products/${id}` : null);
   return (
@@ -121,6 +122,13 @@ function ProductDetail() {
         <>
           <PageHeader title={data.name} description={`SKU ${data.sku}${data.brand ? ` · ${data.brand}` : ""}`} />
           <Editor product={data} onSaved={setData} />
+          <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_340px] items-start">
+            <div className="flex flex-col gap-6 min-w-0">
+              <VariantsCard orgId={org!.id} productId={data.id} canWrite={can.write(role)} />
+              <PhotosCard orgId={org!.id} productId={data.id} canWrite={can.write(role)} />
+            </div>
+            <MercadoLivreCard orgId={org!.id} productId={data.id} canWrite={can.write(role)} />
+          </div>
         </>
       )}
     </>

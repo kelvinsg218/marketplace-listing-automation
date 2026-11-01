@@ -8,9 +8,9 @@ Versionamento: o desktop segue `0.1.x-beta` (`pyproject.toml` da raiz). A web co
 | Etapa | Escopo | Situação |
 |---|---|---|
 | **A** Discovery e arquitetura | Pesquisa ML, auditoria do legado, arquitetura, design system, plano | **Concluída, com bloqueio:** documentações oficiais inacessíveis (403) e templates não analisados |
-| **B** Fundação web | FastAPI, PostgreSQL/Alembic, autenticação, organizações e membros, permissões, auditoria, layout, painel, catálogo básico | **Implementada e testada em SQLite.** Pendente: RLS em PostgreSQL real e compose executado |
-| **C** Catálogo e importações | Variações, mídias, arquivos, compatibilidades, histórico por campo, edição em lote, Central de Importações, fila e worker | Planejada |
-| **D** Mercado Livre | Templates oficiais, inspeção, mapeamento, validação, wizard de anúncios em massa, exportação XLSX | **Bloqueada** até chegarem templates reais |
+| **B** Fundação web | FastAPI, PostgreSQL/Alembic, autenticação, organizações e membros, permissões, auditoria, layout, painel, catálogo básico | **Concluída** (commit `dcc16fe`). Pendente: RLS em PostgreSQL real e compose executado |
+| **C** Catálogo e importações | Variações, mídias, arquivos, compatibilidades, histórico por campo, edição em lote, Central de Importações, fila e worker | **Em andamento:** variações e Central de Fotos implementadas. Importações, compatibilidades, fila e worker pendentes |
+| **D** Mercado Livre | Templates oficiais, inspeção, mapeamento, validação, wizard de anúncios em massa, exportação XLSX | **Em andamento:** registro, inspetor, prazo, mapeamento, validação com fontes, revisão e wizard de 12 etapas implementados. **Writer bloqueado** até chegar um XLSX real |
 | **E** Lotes e resultados | Estados do lote, histórico, reprocessamento, importação da planilha de resultado | Planejada (depende de D e da planilha de erros real) |
 | **F** Consolidação | SMTP, convites, configurações, limitador compartilhado, backups, observabilidade, deploy, testes de carga em PostgreSQL | Planejada |
 
@@ -36,6 +36,14 @@ nenhum obrigatório inventado; a planilha gerada é **aceita no Anunciador em Ma
 
 **E:** estados só avançam para "Enviado externamente" ou "Resultado recebido" por confirmação ou planilha de
 resultado importada; as linhas rejeitadas voltam para correção.
+
+**D (parcial, cumprido nesta sessão):**
+- [x] Template ligado à organização e à conta de vendedor; o original nunca é alterado (teste de hash e de download byte a byte)
+- [x] Inspetor sem efeitos colaterais; arquivos perigosos recusados ou sinalizados; prazo com ano deduzido marcado
+- [x] Template de outra conta recusado no lote (P1 p.8); prazo vencido bloqueia
+- [x] Validação separa interna, documentação, template e hipótese; limite de 10.000 linhas por dia (P1 p.8)
+- [x] Estados "enviado" e "resultado" só com confirmação; exportar responde 409 enquanto o writer não existe
+- [ ] Writer sobre template real · [ ] Error Importer sobre planilha de retorno real · [ ] aceite real no Anunciador em massa
 
 ## Próxima entrega (sugerida)
 
@@ -68,7 +76,7 @@ Com Docker: `docker compose up --build` (ainda não executado).
 ## Como testar
 
 ```powershell
-cd apps\api; .venv\Scripts\python -m pytest              # 53 testes; RLS fica "skipped" sem PostgreSQL
+cd apps\api; .venv\Scripts\python -m pytest              # 86 testes; RLS fica "skipped" sem PostgreSQL
 .venv\Scripts\python -m pytest -m perf -s                 # cenários 10/100/1.000/5.000
 $env:MLA_TEST_DATABASE_URL="postgresql+psycopg://mla:mla-dev-password@localhost:5432/mla_test"; .venv\Scripts\python -m pytest -m postgres
 cd ..\web; npm run typecheck; npm run build
@@ -78,3 +86,6 @@ E2E de navegador (cadastro → painel → produtos → validação → edição 
 celular 390 px), com a API servindo o build estático e um banco de desenvolvimento:
 `.venv\Scripts\python apps\web\e2e\smoke_flow.py <pasta_capturas> http://127.0.0.1:8000` (venv do desktop, que já
 tem Playwright e usa o Edge). Gera as capturas usadas na revisão visual.
+
+Fluxo de anúncios em massa no Edge, com template **sintético** (não oficial):
+`.venv\Scripts\python apps\web\e2e\bulk_flow.py <pasta_capturas> http://127.0.0.1:8000 <arquivo.xlsx>`. Gere o arquivo com `build()` de `apps/api/tests/synthetic_template.py`.

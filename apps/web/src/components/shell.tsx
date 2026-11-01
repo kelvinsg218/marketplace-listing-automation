@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  Boxes, ChevronsUpDown, FileSpreadsheet, History, LayoutDashboard, Layers, LogOut, Menu, Network, PackageOpen,
+  Boxes, ChevronsUpDown, FileSpreadsheet, History, Images, LayoutDashboard, Layers, LogOut, Menu, Network, PackageOpen,
   Settings, Store, Upload, Users, Wrench, X,
 } from "lucide-react";
 import { useRequireSession, useSession } from "@/lib/session";
@@ -17,16 +17,17 @@ const NAV: { section: string; items: NavItem[] }[] = [
   {
     section: "Catálogo", items: [
       { href: "/catalogo/", label: "Produtos", icon: Boxes },
+      { href: "/fotos/", label: "Central de Fotos", icon: Images },
       { href: "/importacoes/", label: "Importações", icon: Upload, soon: true },
       { href: "/compatibilidades/", label: "Compatibilidades", icon: Wrench, soon: true },
     ],
   },
   {
     section: "Anúncios", items: [
-      { href: "/anuncios-em-massa/", label: "Anúncios em massa", icon: Layers, soon: true },
-      { href: "/templates/", label: "Templates", icon: FileSpreadsheet, soon: true },
-      { href: "/lotes/", label: "Lotes e exportações", icon: PackageOpen, soon: true },
-      { href: "/marketplaces/", label: "Marketplaces", icon: Store, soon: true },
+      { href: "/anuncios-em-massa/", label: "Anúncios em massa", icon: Layers },
+      { href: "/templates/", label: "Templates", icon: FileSpreadsheet },
+      { href: "/lotes/", label: "Lotes e exportações", icon: PackageOpen },
+      { href: "/marketplaces/", label: "Marketplaces", icon: Store },
     ],
   },
   {

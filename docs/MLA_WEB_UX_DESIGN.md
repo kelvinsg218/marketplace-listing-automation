@@ -67,9 +67,15 @@ para módulos futuros: `ComingSoon` (diz a etapa e o bloqueio).
 | Catálogo (lista, busca, filtro, paginação, criar) e Produto detalhado (editar, pendências, excluir) | Implementados (campos da etapa B) |
 | Organização (membros e papéis) | Implementada |
 | Histórico (auditoria) | Implementado (proprietário e administrador) |
-| Importações, Compatibilidades, Marketplaces, Templates, Anúncios em massa, Lotes, Configurações | Placeholder "em breve" com a etapa responsável |
+| Produto detalhado: Variações, Fotos (arquivo + URLs do Gestor, ordem), Mercado Livre (Código de catálogo ML) | Implementado |
+| Central de Fotos (pendências de URL oficial + passo a passo do Gestor de fotos, P3) | Implementada |
+| Marketplaces (contas de vendedor) | Implementada |
+| Templates (registro, lista com prazo e situação) e detalhe (prévia da aba com marcadores, prazo, editor de mapeamento) | Implementados |
+| Anúncios em massa: lista de lotes e wizard de 12 etapas | Implementado; Exportar, Importar resultados e Reprocessar mostram o bloqueio real |
+| Lotes e exportações (situação e histórico) | Implementada |
+| Importações, Compatibilidades, Configurações | Placeholder "em breve" com a etapa responsável |
 
-Wizard de Anúncios em massa (etapa D), planejado como trilho horizontal de 9 passos (vertical no celular). Cada passo
+Wizard de Anúncios em massa: trilho vertical de 12 etapas no desktop (horizontal com rolagem no celular), KPIs reais do lote (selecionados, linhas, completos, com erros, pronto), conta e template sempre visíveis. Cada problema mostra a severidade **e** a fonte (Regra interna / Documentação ML / Template / Hipótese), com a referência PDF+página. Plano original: Cada passo
 mostra o progresso salvo no lote e permite voltar. A validação agrupa por severidade, com a correção inline na própria
 linha do produto.
 

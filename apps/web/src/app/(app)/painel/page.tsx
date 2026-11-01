@@ -104,7 +104,7 @@ export default function DashboardPage() {
             <Kpi label="Total de produtos" value={d.products_total} icon={Boxes} tone="accent" href="/catalogo/" />
             <Kpi label="Produtos completos" value={d.products_complete} icon={CheckCircle2} tone="ok" note="sem erros nem avisos internos" />
             <Kpi label="Com pendências" value={d.products_with_pendings} icon={AlertTriangle} tone="warn" href="/catalogo/" note="corrija antes de preparar anúncios" />
-            <Kpi label="Lotes criados" value={d.batches_total} icon={Layers} note="disponível na etapa E (lotes)" />
+            <Kpi label="Lotes criados" value={d.batches_total} icon={Layers} href="/lotes/" note="preparações de anúncios em massa" />
             <Kpi label="Planilhas exportadas" value={d.exports_total} icon={FileSpreadsheet} note="aguarda template oficial do Mercado Livre" />
             <Kpi label="Erros de validação" value={d.validation_errors} icon={ShieldAlert} note="disponível na etapa D (validação)" />
           </div>

@@ -16,18 +16,18 @@ Documentos: [BUILD_E_DISTRIBUICAO.md](BUILD_E_DISTRIBUICAO.md), [GUIA_MERCADO_LI
 
 ## MLA Web 2.0 (01/11/2026, `apps/`, versão 2.0.0-alpha.0)
 
-**Etapa B (fundação) implementada e testada; o desktop acima segue inalterado.** API: 53 testes aprovados + 1 pulado
-(RLS, que exige PostgreSQL). Web: typecheck e build estático ok; fluxo E2E no Edge ok, sem rolagem horizontal em
-390 px.
+O desktop acima segue inalterado. A fundação web foi publicada no `main` (`dcc16fe`). API: 86 testes aprovados + 1
+pulado (RLS, que exige PostgreSQL). Web: typecheck e build ok (24 páginas). E2E no Edge: fluxo básico e fluxo de
+anúncios em massa ok, sem rolagem horizontal em 390 px.
 
 | Área | Situação |
 |---|---|
 | Autenticação, organizações, papéis, auditoria | Implementado e testado (SQLite) |
-| Isolamento entre empresas | Aplicação: testado. RLS no PostgreSQL: escrito, **não executado** (sem PostgreSQL nesta máquina) |
-| Catálogo | CRUD básico (sem variações, mídias nem compatibilidades), busca, pendências internas, painel com métricas reais |
-| Importações, templates, anúncios em massa, lotes | Não iniciados (etapas C a E). Exportação ML **bloqueada**: docs oficiais com 403 e sem template real |
-| Docker Compose | Escrito, **não executado** (Docker ausente) |
-| E-mail de produção | Não implementado (dev grava em `apps/api/.data/outbox`) |
+| Isolamento entre empresas | Aplicação: testado, inclusive nos módulos novos. RLS: políticas escritas para 10 tabelas, **não executadas**. O PostgreSQL 18 está instalado aqui, mas falta criar o papel `mla` (precisa da senha do superusuário) |
+| Catálogo | CRUD, variações, fotos (arquivo + URLs oficiais), Código de catálogo ML, Central de Fotos |
+| Mercado Livre | Regras dos 3 PDFs oficiais registradas com fonte. Contas, registro e inspeção de templates, prazo, mapeamento, validação, revisão, wizard de 12 etapas: implementados e testados **com XLSX sintético**. Writer e importador de erros: **bloqueados** (falta XLSX real) |
+| Importações, compatibilidades, fila/worker | Não iniciados |
+| Docker Compose / e-mail de produção | Não executado / não implementado |
 
 Documentos: [MLA_WEB_ROADMAP.md](MLA_WEB_ROADMAP.md), [MLA_WEB_ARCHITECTURE.md](MLA_WEB_ARCHITECTURE.md),
 [MLA_MERCADOLIVRE_RESEARCH.md](MLA_MERCADOLIVRE_RESEARCH.md), [MLA_WEB_UX_DESIGN.md](MLA_WEB_UX_DESIGN.md),

@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from mla_api import __version__
 from mla_api.db import make_engine, make_sessionmaker
 from mla_api.mailer import DisabledMailer, Mailer, OutboxMailer
-from mla_api.routers import auth, orgs, products
+from mla_api.routers import auth, listings, media, orgs, products
 from mla_api.security import LoginLimiter
 from mla_api.settings import Settings, get_settings
 from mla_api.storage import LocalStorage
@@ -71,6 +71,8 @@ def create_app(settings: Settings | None = None, *, mailer: Mailer | None = None
     app.include_router(auth.router)
     app.include_router(orgs.router)
     app.include_router(products.router)
+    app.include_router(media.router)
+    app.include_router(listings.router)
 
     if settings.web_dist_dir and settings.web_dist_dir.is_dir():
         app.mount("/", StaticFiles(directory=settings.web_dist_dir, html=True), name="web")

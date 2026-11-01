@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from mla_api import audit
 from mla_api.deps import OrgContext, require
 from mla_api.domain.catalog import catalog_pendings, is_complete
-from mla_api.models import Product, ProductStatus
+from mla_api.models import ListingBatch, Product, ProductStatus
 from mla_api.routers.orgs import recent_audit
 from mla_api.schemas import DashboardOut, PendingOut, ProductIn, ProductOut, ProductPage, ProductPatch
 
@@ -116,6 +116,9 @@ def dashboard(ctx: OrgContext = Depends(require("catalog.read"))) -> DashboardOu
         if is_complete(catalog_pendings(name=name, brand=brand, gtin=gtin, description=description,
                                         price_cents=price)):
             complete += 1
+    batches = ctx.db.scalar(select(func.count()).select_from(ListingBatch)
+                            .where(ListingBatch.organization_id == ctx.org_id))
     return DashboardOut(products_total=total, products_complete=complete, products_with_pendings=total - complete,
+                        batches_total=batches,
                         products_by_status={s.value: by_status.get(s.value, 0) for s in ProductStatus},
                         recent_activity=recent_audit(ctx, 8))

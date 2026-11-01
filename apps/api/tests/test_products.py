@@ -72,7 +72,7 @@ def test_dashboard_counts_are_real(owner):
     api.add_product(org, "NO-PRICE", brand="X")
     d = api.get(f"/api/orgs/{org}/dashboard").json()
     assert (d["products_total"], d["products_complete"], d["products_with_pendings"]) == (2, 1, 1)
-    assert d["batches_total"] is None and d["exports_total"] is None  # modules not built: no fake zeros
+    assert d["batches_total"] == 0 and d["exports_total"] is None  # no writer yet: no fake zero for exports
     assert d["recent_activity"][0]["action"] == "product.created"
 
 

@@ -16,6 +16,8 @@ dependencies = [
     "pydantic-settings==2.16.2",
     "argon2-cffi==25.1.0",
     "email-validator>=2.2",
+    "python-multipart==0.0.20",
+    "openpyxl==3.1.5",   # template inspection (macros never loaded)
 ]
 
 [project.optional-dependencies]

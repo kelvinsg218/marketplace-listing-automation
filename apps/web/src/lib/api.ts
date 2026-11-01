@@ -36,6 +36,19 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   return data as T;
 }
 
+/** Multipart upload (files). The browser sets the multipart boundary itself. */
+export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, { method: "POST", credentials: "same-origin", headers: { "X-MLA-Client": "web" }, body: form });
+  } catch {
+    throw new ApiError(0, "Sem conexão com o servidor.");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, detailMessage((data as { detail?: unknown }).detail));
+  return data as T;
+}
+
 // --- types mirrored from apps/api/src/mla_api/schemas.py ---------------------------------------------------------
 export type Role = "owner" | "admin" | "editor" | "viewer";
 export interface User { id: string; name: string; email: string }
@@ -60,6 +73,47 @@ export interface Dashboard {
   recent_activity: AuditEvent[];
 }
 export interface Member { user: User; role: Role; created_at: string }
+
+// --- catalog media / bulk listing (apps/api/src/mla_api/routers/media.py, listings.py) ---------------------------
+export interface Variant { id: string; sku: string; attributes: Record<string, string>; gtin: string; gtin_valid: boolean; price_cents: number | null; stock: number }
+export interface ProductImage {
+  id: string; position: number; variant_id: string | null; has_file: boolean; content_type: string; size_bytes: number;
+  original_name: string; official_url: string; url_problem: string | null;
+}
+export interface PhotoStatus { product_id: string; sku: string; name: string; images: number; with_url: number; without_url: number; over_group_limit: boolean }
+export interface SellerAccount { id: string; marketplace: string; label: string; external_id: string; templates: number }
+export interface TemplateSheet { name: string; state: string; is_help: boolean; max_row: number; max_column: number }
+export interface Marker { key: string; cell: string; text: string }
+export interface SheetReport extends TemplateSheet {
+  max_column_letter: string; merged_ranges: number; formula_cells: number; protected: boolean;
+  data_validations: { sqref: string; type: string; formula1: string }[]; markers: Marker[];
+  header_candidates: { row: number; filled_cells: number; marker_hits: number }[]; preview: string[][];
+}
+export interface Template {
+  id: string; seller_account_id: string; seller_account_label: string; source: string; original_filename: string;
+  sha256: string; size_bytes: number; status: "inspected" | "invalid" | "archived"; deadline_text: string;
+  deadline_date: string | null; deadline_confirmed: boolean; expired: boolean; sheets: TemplateSheet[]; warnings: string[];
+  created_at: string;
+  structure?: { sheets: SheetReport[]; help_sheet: string | null; hidden_sheets: string[]; defined_names: string[]; deadline: { text: string; date: string; year_inferred: boolean; cell: string; sheet?: string } | null; warnings: string[] };
+}
+export interface MappingColumn { col: string; header: string; required: boolean; suggestion: string | null }
+export interface Mapping {
+  sheet_name: string; header_row: number; header_row_confirmed: boolean; header_candidates: { row: number }[];
+  columns: MappingColumn[]; rules: Record<string, { source: string | null; default: string }>; source_fields: Record<string, string>;
+}
+export type BatchStatus = "draft" | "needs_fix" | "ready" | "exported" | "sent_external" | "result_received" | "done";
+export interface Batch {
+  id: string; name: string; status: BatchStatus; seller_account_id: string | null; seller_account_label: string | null;
+  template_id: string | null; template_filename: string | null; template_expired: boolean; sheet_name: string; items: number;
+  validation: { products?: number; rows?: number; complete?: number; with_errors?: number; with_warnings?: number; errors_total?: number; ready?: boolean; validated_at?: string };
+  history: { at: string; by: string; event: string; [k: string]: unknown }[]; created_at: string; updated_at: string;
+}
+export interface RuleIssue { code: string; severity: "error" | "warning" | "info"; source: "interna" | "documentacao" | "template" | "hipotese"; message: string; fix: string; field: string; ref: string; sku: string }
+export interface Validation {
+  summary: Required<Batch["validation"]>;
+  template_issues: RuleIssue[]; batch_issues: RuleIssue[];
+  products: { product_id: string; sku: string; name: string; rows: number; errors: number; warnings: number; issues: RuleIssue[] }[];
+}
 
 export const can = {
   write: (r?: Role) => r === "owner" || r === "admin" || r === "editor",

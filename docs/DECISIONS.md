@@ -129,3 +129,12 @@ sources say the spreadsheet is generated per account and category and only files
 are accepted, so the exporter will fill copies of user-supplied official templates (original stored immutable +
 SHA-256), never synthesize one. Public `/categories/{id}/attributes` (200) can complement validation. Evidence and
 open questions: MLA_MERCADOLIVRE_RESEARCH.md.
+
+**D-026 (2026-11-01) Mercado Livre rules come from the three official PDFs, with citations.** The user saved the
+Central de aprendizagem pages (bulk listing in 5 steps, filling the sheet, Gestor de fotos) as PDFs; both text and
+screenshots were read. Every rule in code and UI cites PDF+page, and issues carry a source (interna / documentacao /
+template / hipotese); hypotheses never block. Templates belong to organization + seller account (P1 p.8); the
+inspector is read-only and only reports markers with coordinates; header rows are user-confirmed; a deadline without
+a year is stored as inferred until confirmed. Photos are official Gestor URLs joined by commas (P3 p.4); the
+10-photo group limit warns, never limits the catalog. Batch states past "exported" only change on explicit user
+confirmation. Writer and error importer stay unimplemented (export answers 409) until real XLSX files are analysed.

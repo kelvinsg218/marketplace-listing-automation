@@ -1,6 +1,8 @@
 # MLA Web 2.0: arquitetura
 
-Situação em 01/11/2026: **etapa B (fundação) implementada e testada**. O resto está planejado (ver MLA_WEB_ROADMAP.md).
+Situação em 01/11/2026: **etapa B concluída e publicada** (commit `dcc16fe`). Da etapa C: variações e fotos.
+Da etapa D: registro e inspeção de templates, mapeamento, validação e o fluxo guiado de lotes. Tudo testado com
+arquivos **sintéticos**. O preenchimento da planilha (writer) e o importador de erros esperam arquivos reais.
 
 ## 1. Visão geral
 
@@ -106,17 +108,18 @@ incluí-la em `TENANT_TABLES` (ou na lista explícita de exceções, hoje só `m
 - Cabeçalhos: `Cache-Control: no-store` na API, `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`. Documentação
   OpenAPI desligada em produção.
 
-## 6. Modelo de dados planejado (etapas C a E)
+## 6. Modelo de dados (implementado até a migração 0002; o resto está planejado)
 
 ```
-products ─┬─ product_variants (sku, atributos de variação, estoque, preço)
-          ├─ product_media (storage key, sha256, ordem, variante opcional)
+products ─┬─ product_variants (sku, atributos de variação, estoque, preço)          [0002 ✓]
+          ├─ product_images (arquivo e/ou URL oficial do Gestor, ordem, variante)      [0002 ✓]
+          ├─ product_channel_data (Código de catálogo ML, categoria por marketplace)  [0002 ✓]
           ├─ product_files · product_compatibilities (origem + verificação, como no desktop D-016)
           └─ product_changes (histórico por campo, como no desktop D-018)
 import_batches → import_rows (plano persistido, como no desktop D-014) · jobs (fila)
-marketplaces (por organização) · ml_templates (arquivo original imutável + sha256 + estrutura extraída + versão)
-template_mappings (coluna oficial → campo do catálogo | valor padrão | conversão)
-batches (estados da seção 11 do pedido) → batch_items (produto/variante, linha gerada, problemas)
+seller_accounts [0002 ✓] · marketplace_templates (original imutável + sha256 + relatório do inspetor + prazo) [0002 ✓]
+template_mappings (aba + linha de cabeçalho confirmada + coluna → campo | valor padrão) [0002 ✓]
+listing_batches (status, validação, histórico) → listing_batch_items (produto) [0002 ✓]
 exports (arquivo gerado, quem, quando) · batch_results (planilha de resultado importada, quando suportada)
 ```
 
@@ -133,3 +136,31 @@ no desktop.
 | Limitador de login em memória | Mover para tabela antes de escalar horizontalmente |
 | E-mail de produção ausente | SMTP/serviço transacional na etapa F; até lá, redefinição só em dev |
 | Next.js 15 e Node pesam no notebook de 8 GB | Export estático; em produção não há Node |
+
+## 8. Motor de templates do Mercado Livre
+
+Regras citadas como P1/P2/P3 + página: ver MLA_MERCADOLIVRE_RESEARCH.md.
+
+| Componente | Onde | Situação |
+|---|---|---|
+| **Template Registry** | `routers/listings.py` (`/templates`), tabela `marketplace_templates` | Implementado. O template pertence à organização **e** à conta de vendedor (P1 p.8). O original fica guardado byte a byte (`orgs/<org>/templates/<id>.xlsx`) com SHA-256; o mesmo arquivo não é registrado duas vezes na mesma organização e outras organizações nunca o veem. Registra a origem (categorias, códigos, links, Shopee, P1 p.5), o prazo e o status (inspected/invalid/archived) |
+| **Template Inspector** | `domain/template_inspector.py` | Implementado, somente leitura. Antes do openpyxl, verifica o pacote (tamanho, ZIP, limite descompactado, macros e vínculos sinalizados e nunca carregados). Reporta abas e visibilidade, aba Ajuda, validações de dados, fórmulas, células mescladas, proteção, nomes definidos, marcadores da documentação **com coordenadas** e as 15 primeiras linhas. Não decide o layout: sugere linhas candidatas a cabeçalho e o usuário confirma |
+| **Prazo** | inspetor + `PATCH /templates/{id}` | Implementado. Procura "até D de mês [de AAAA]" na aba Ajuda (P2 p.1–2). Sem ano no texto, o ano é deduzido e fica **não confirmado** até o usuário confirmar. Prazo vencido bloqueia o lote |
+| **Attribute Mapper** | `domain/listing_rules.py` + `/templates/{id}/mapping` | Implementado. Usa a linha de cabeçalho confirmada, as colunas lidas do arquivo, "Obrigatório" na célula do cabeçalho ou logo abaixo dela, sugestões por sinônimo (só sugestão, salva apenas com confirmação), campo do catálogo, `attr:<nome>` ou valor padrão. O mapeamento é reutilizado por todos os lotes do template |
+| **Validation Engine** | `domain/listing_rules.py` | Implementado. Cada problema traz severidade, **fonte** (`interna`, `documentacao`, `template`, `hipotese`), referência (PDF e página) e a correção. Hipóteses nunca geram erro |
+| **Preview** | `GET /batches/{id}/preview` | Implementado: valores por linha (uma por variação, P1 p.6), fotos unidas por vírgula (P3 p.4). Nenhum arquivo é escrito |
+| **Workbook Writer** | — | **Não implementado**, de propósito: `POST /batches/{id}/export` responde 409 até analisarmos um XLSX real (D-025). Requisito: escrever só nas células de dados de uma cópia, sem tocar abas, cabeçalhos, instruções, validações ou fórmulas (P1 p.6, P2 p.2) |
+| **Error Importer** | — | **Não implementado**: depende de uma planilha de retorno real com "Resumo de erros" (P1 p.8) |
+
+Estados do lote: `draft → needs_fix | ready` (pela validação; qualquer mudança de conteúdo volta para `draft`) →
+`exported` (writer, pendente) → `sent_external` (somente com `confirm-sent` do usuário) → `result_received`
+(somente com `confirm-result` do usuário; a planilha de erros importada fica para depois). Lotes enviados ficam
+bloqueados para edição. Todo evento vai para `history` (quem, quando, o quê) e para a auditoria.
+
+**Central de Fotos:** o catálogo guarda arquivos (JPG/PNG/WEBP verificados pelos bytes, até 10 MB, servidos só por
+rota autorizada) e as **URLs oficiais** coladas do Gestor de fotos (o texto com várias URLs separadas por vírgula é
+dividido). O limite de 10 fotos é do grupo do Gestor (P3 p.2): gera aviso na validação e não limita o catálogo. Não há
+upload para o Gestor, porque não existe integração oficial documentada.
+
+**Permissões:** contas de vendedor exigem `members.manage` (admin/owner); templates, mapeamentos e lotes exigem
+`catalog.write` (editor+); leitura, `catalog.read`.

@@ -20,12 +20,18 @@
 
 ## MLA Web 2.0
 Ações humanas:
-1. **Bloqueio da etapa D:** salvar em PDF as duas páginas oficiais do Anunciador em Massa e baixar da sua conta 2 ou 3
-   templates intactos (autopeças, uma categoria com variações, uma simples) para `docs/ml-research/` (ignorada pelo
-   git). Lista completa: [MLA_MERCADOLIVRE_RESEARCH.md §5](MLA_MERCADOLIVRE_RESEARCH.md).
-2. Decidir se instala Docker Desktop (ou PostgreSQL 17 nativo) nesta máquina, ou se o teste de RLS roda em CI/VPS.
-3. Autorizar commit dos arquivos novos (`apps/`, `infra/`, `docker-compose.yml`, `docs/MLA_*`).
+1. **Templates reais (bloqueiam o writer):** no Anunciador em massa da sua conta, baixe sem editar: (a) uma categoria
+   de autopeças; (b) uma categoria com variações; (c) se possível, uma gerada por código universal ou link. Coloque em
+   `docs/ml-research/` (ignorada pelo git). Lista em [MLA_MERCADOLIVRE_RESEARCH.md §8](MLA_MERCADOLIVRE_RESEARCH.md).
+2. **Planilha de retorno com "Resumo de erros"** (bloqueia o importador de erros), se conseguir gerar uma com dados
+   de teste.
+3. **RLS no PostgreSQL 18 local:** rode uma vez, no PowerShell, na raiz do projeto:
+   `& "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -h localhost -f infra\postgres\init.sql`
+   (pede a senha do superusuário definida na instalação). Depois o teste de RLS roda com o papel `mla`.
+4. **Desktop:** atualizar
+   `tests/ui/test_ui_master_catalog.py::test_listing_page_blocks_queue_for_marketplace_without_automation` para a nova
+   mensagem da API oficial, que é seu trabalho em andamento em `src/mla/ui/pages/listings.py`.
 
-Desenvolvimento (etapa C): executar `pytest -m postgres`; variações, mídias com upload autorizado, unidades; Central
-de Importações (CSV/XLSX primeiro) com fila PostgreSQL e worker; depois o inspetor de templates (somente leitura)
-quando os arquivos chegarem.
+Desenvolvimento: (1) com os templates, rodar o inspetor nos arquivos reais e escrever a seção 9 da pesquisa; (2) só
+então o Workbook Writer, que preenche uma cópia e é testado comparando o XML interno com o original; (3) etapa C:
+Central de Importações (CSV/XLSX primeiro) com fila PostgreSQL e worker, compatibilidades e edição em lote.

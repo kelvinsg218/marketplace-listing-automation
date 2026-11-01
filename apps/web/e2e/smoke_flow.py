@@ -91,9 +91,9 @@ with sync_playwright() as p:
     shot(page, "07-organization")
     page.get_by_role("link", name="Histórico", exact=True).click()
     expect(page.get_by_text("cadastrou o produto FO-100")).to_be_visible()
-    page.get_by_role("link", name="Anúncios em massa em breve").click()
-    expect(page.get_by_text("Bloqueado:", exact=False)).to_be_visible()
-    shot(page, "08-bulk-coming-soon")
+    page.get_by_role("link", name="Anúncios em massa", exact=True).click()
+    expect(page.get_by_role("button", name="Criar lote")).to_be_visible()
+    shot(page, "08-bulk-list")
 
     page.get_by_role("button", name="Sair").click()
     page.wait_for_url("**/entrar/**")
