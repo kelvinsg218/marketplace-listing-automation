@@ -1,0 +1,2 @@
+# Browser end-to-end scripts (Playwright driving the installed Microsoft Edge / Google Chrome).
+playwright==1.63.0

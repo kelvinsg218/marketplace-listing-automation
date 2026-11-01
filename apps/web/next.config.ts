@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
   ...(isDev
     ? { rewrites: async () => [{ source: "/api/:path*", destination: `${apiOrigin}/api/:path*` }] }
     : { output: "export" }),
+  // NEXT_DIST_DIR lets `next build` run while `next dev` is using .next (they must not share the folder).
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   trailingSlash: true,
   images: { unoptimized: true },
   poweredByHeader: false,

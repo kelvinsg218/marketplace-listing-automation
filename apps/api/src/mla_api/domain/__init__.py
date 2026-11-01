@@ -1,1 +1,1 @@
-"""Framework-free business rules. Ported from the desktop app (src/mla/core); the desktop copy stays the reference."""
+"""Framework-free business rules (catalog, official template inspector/writer, sheet builder, adaptive rules)."""

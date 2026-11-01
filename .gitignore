@@ -16,19 +16,15 @@ dist/
 # Claude Code local-only settings
 .claude/settings.local.json
 
-# user data never goes to the repository (it lives in %LOCALAPPDATA%\MLA)
+# local data never goes to the repository
 data/
 *.db
 *.db-wal
 *.db-shm
 *.db-journal
-browser-profiles/
-artifacts/
 backups/
-exports/
 logs/
 *.log
-snapshots/
 
 # secrets
 .env
@@ -38,14 +34,8 @@ snapshots/
 *.pfx
 credentials*.json
 
-# demonstration outputs (never committed: recordings, generated data, screenshots)
-demo/recordings/
-demo/demo-data/
-demo/output/
-demo/fixtures/
-demo/screenshots/
-demo/pilot/
-demo/*.pid
+# outputs of the discontinued desktop demo that may still exist locally
+demo/
 
 # MLA Web (apps/)
 !.env.example
@@ -54,3 +44,6 @@ apps/web/.next/
 apps/web/out/
 node_modules/
 docs/ml-research/
+
+# local archive of discontinued desktop work in progress (never committed)
+local-archive/

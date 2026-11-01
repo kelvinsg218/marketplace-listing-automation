@@ -1,6 +1,6 @@
 """Catalog rules: GTIN check digit, SKU format and the completeness rule used by the dashboard.
 
-normalize_gtin / gtin_valid are copied from src/mla/core/validation.py (desktop), unchanged.
+normalize_gtin / gtin_valid come from the discontinued desktop app (git history before D-030), unchanged.
 """
 from __future__ import annotations
 
