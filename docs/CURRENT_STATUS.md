@@ -13,3 +13,22 @@ distribuição comercial.** Testes: 256 aprovados, 0 falhos (inclui 9 de ponta a
 
 Documentos: [BUILD_E_DISTRIBUICAO.md](BUILD_E_DISTRIBUICAO.md), [GUIA_MERCADO_LIVRE.md](GUIA_MERCADO_LIVRE.md),
 [ROTEIRO_TESTE_SEGUNDO_COMPUTADOR.md](ROTEIRO_TESTE_SEGUNDO_COMPUTADOR.md), [NEXT_STEPS.md](NEXT_STEPS.md).
+
+## MLA Web 2.0 (01/11/2026, `apps/`, versão 2.0.0-alpha.0)
+
+**Etapa B (fundação) implementada e testada; o desktop acima segue inalterado.** API: 53 testes aprovados + 1 pulado
+(RLS, que exige PostgreSQL). Web: typecheck e build estático ok; fluxo E2E no Edge ok, sem rolagem horizontal em
+390 px.
+
+| Área | Situação |
+|---|---|
+| Autenticação, organizações, papéis, auditoria | Implementado e testado (SQLite) |
+| Isolamento entre empresas | Aplicação: testado. RLS no PostgreSQL: escrito, **não executado** (sem PostgreSQL nesta máquina) |
+| Catálogo | CRUD básico (sem variações, mídias nem compatibilidades), busca, pendências internas, painel com métricas reais |
+| Importações, templates, anúncios em massa, lotes | Não iniciados (etapas C a E). Exportação ML **bloqueada**: docs oficiais com 403 e sem template real |
+| Docker Compose | Escrito, **não executado** (Docker ausente) |
+| E-mail de produção | Não implementado (dev grava em `apps/api/.data/outbox`) |
+
+Documentos: [MLA_WEB_ROADMAP.md](MLA_WEB_ROADMAP.md), [MLA_WEB_ARCHITECTURE.md](MLA_WEB_ARCHITECTURE.md),
+[MLA_MERCADOLIVRE_RESEARCH.md](MLA_MERCADOLIVRE_RESEARCH.md), [MLA_WEB_UX_DESIGN.md](MLA_WEB_UX_DESIGN.md),
+[MLA_LEGACY_MIGRATION.md](MLA_LEGACY_MIGRATION.md).

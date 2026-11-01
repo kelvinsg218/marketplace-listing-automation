@@ -100,3 +100,32 @@ the catalog pending-issues report for the client.
 retried like timeouts, within the same `automation.max_retries`, only in steps that go through `_attempt` (open
 form, fill fields, upload images). The publish click and the confirmation are never retried; an error there still
 ends in "Verificar manualmente". Other browser errors (closed page, crashes) are not retried blindly.
+
+**D-021 (2026-11-01) MLA Web 2.0 lives in `apps/`, desktop stays in place.** `apps/api` (FastAPI) and `apps/web`
+(Next.js) with their own venv/node_modules and tests; `src/mla` is not moved (a `legacy/` move would break
+PyInstaller, installer and test paths). Business rules are copied as pure functions (GTIN first) instead of importing
+`mla`, which would drag PySide6/Playwright into the server. Details: MLA_WEB_ARCHITECTURE.md, MLA_LEGACY_MIGRATION.md.
+
+**D-022 (2026-11-01) Web stack.** Next.js 15 exported as static files (no Node server in production; same origin as
+the API, cookie session) + FastAPI/SQLAlchemy 2/Alembic + PostgreSQL. SQLite accepted only outside production (no
+Docker/PostgreSQL on the dev laptop; `Settings` refuses it in production). Background work will use a PostgreSQL job
+table with SKIP LOCKED instead of Celery/Redis. No chart library until there is time-series data. Rejected: Next SSR
+(second server, cross-origin cookies, no SEO need), Vite SPA (equivalent; kept the owner's preference).
+
+**D-023 (2026-11-01) Tenant isolation = route membership + query filter + PostgreSQL RLS.** Organization routes are
+`/api/orgs/{id}/...`; non-members get 404. Every org-owned table has `organization_id` and, unless explicitly exempt
+(memberships), ENABLE+FORCE RLS keyed on `current_setting('app.org_id')`, set per transaction (`db.set_tenant`,
+re-applied after commits). The app role must not be a superuser. A test fails if a new org-owned table is not listed
+in `TENANT_TABLES`. Storage keys are `orgs/<org_id>/<category>/<name>` and reads check the owner.
+
+**D-024 (2026-11-01) Web auth.** Server-side sessions (random token in an HttpOnly SameSite=Lax cookie, SHA-256 in
+DB, 7 days sliding), Argon2id, CSRF header `X-MLA-Client: web` on unsafe methods, identical login errors + dummy
+hash, in-process login limiter (must move to shared storage before multiple instances), reset token in the URL
+fragment, single use, 30 min, kills all sessions.
+
+**D-025 (2026-11-01) Mercado Livre bulk spreadsheet: no exporter before real templates.** Both official help pages
+and the developer portal return 403 to automated reads (direct and headless Edge); not circumvented. Third-party
+sources say the spreadsheet is generated per account and category and only files downloaded from the same account
+are accepted, so the exporter will fill copies of user-supplied official templates (original stored immutable +
+SHA-256), never synthesize one. Public `/categories/{id}/attributes` (200) can complement validation. Evidence and
+open questions: MLA_MERCADOLIVRE_RESEARCH.md.

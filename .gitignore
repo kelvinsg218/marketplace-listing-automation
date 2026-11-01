@@ -46,3 +46,11 @@ demo/fixtures/
 demo/screenshots/
 demo/pilot/
 demo/*.pid
+
+# MLA Web (apps/)
+!.env.example
+apps/api/.data/
+apps/web/.next/
+apps/web/out/
+node_modules/
+docs/ml-research/

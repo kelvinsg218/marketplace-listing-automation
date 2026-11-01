@@ -17,3 +17,15 @@
 - Variações e fotos na validação do Mercado Livre.
 - Associar fotos às variações; distinguir arquivo corrompido de não encontrado nas mídias pendentes.
 - Desinstalador sem console (hoje é um script PowerShell).
+
+## MLA Web 2.0
+Ações humanas:
+1. **Bloqueio da etapa D:** salvar em PDF as duas páginas oficiais do Anunciador em Massa e baixar da sua conta 2 ou 3
+   templates intactos (autopeças, uma categoria com variações, uma simples) para `docs/ml-research/` (ignorada pelo
+   git). Lista completa: [MLA_MERCADOLIVRE_RESEARCH.md §5](MLA_MERCADOLIVRE_RESEARCH.md).
+2. Decidir se instala Docker Desktop (ou PostgreSQL 17 nativo) nesta máquina, ou se o teste de RLS roda em CI/VPS.
+3. Autorizar commit dos arquivos novos (`apps/`, `infra/`, `docker-compose.yml`, `docs/MLA_*`).
+
+Desenvolvimento (etapa C): executar `pytest -m postgres`; variações, mídias com upload autorizado, unidades; Central
+de Importações (CSV/XLSX primeiro) com fila PostgreSQL e worker; depois o inspetor de templates (somente leitura)
+quando os arquivos chegarem.

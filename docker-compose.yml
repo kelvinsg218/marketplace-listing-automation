@@ -1,0 +1,49 @@
+# MLA Web — development stack. Desktop app (src/mla) is not part of it.
+# Usage: docker compose up --build   → web http://localhost:3000, API http://localhost:8000/api/docs
+# NOTE: written but not executed yet (Docker is not installed on the development laptop).
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres-dev-only
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: ./apps/api
+    environment:
+      MLA_ENVIRONMENT: development
+      MLA_DATABASE_URL: postgresql+psycopg://mla:mla-dev-password@db:5432/mla
+      MLA_TEST_DATABASE_URL: postgresql+psycopg://mla:mla-dev-password@db:5432/mla_test
+      MLA_STORAGE_DIR: /data/storage
+      MLA_COOKIE_SECURE: "false"
+      MLA_PUBLIC_URL: http://localhost:3000
+    volumes:
+      - apidata:/data
+    ports: ["8000:8000"]
+    depends_on:
+      db: {condition: service_healthy}
+
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npm run dev -- --hostname 0.0.0.0"
+    environment:
+      MLA_API_ORIGIN: http://api:8000
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+    ports: ["3000:3000"]
+    depends_on: [api]
+
+volumes:
+  pgdata:
+  apidata:
