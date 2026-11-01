@@ -37,6 +37,17 @@
 html {
   color-scheme: dark;
   background: var(--color-bg);
+  /* Same scrollbars in every browser: Edge on Windows 11 draws thin overlay scrollbars by default, Chrome draws
+     classic 15-17 px bars that eat layout width and look heavy on a dark UI. Standard properties (Chrome 121+,
+     Edge, Firefox); the gutter keeps the layout from shifting when a page starts to scroll. */
+  scrollbar-color: var(--color-line-strong) var(--color-bg);
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+
+* {
+  scrollbar-color: var(--color-line-strong) transparent;
+  scrollbar-width: thin;
 }
 
 body {

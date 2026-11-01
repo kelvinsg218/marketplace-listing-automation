@@ -94,9 +94,9 @@ export interface Template {
   sha256: string; size_bytes: number; status: "inspected" | "invalid" | "archived"; deadline_text: string;
   deadline_date: string | null; deadline_confirmed: boolean; expired: boolean; sheets: TemplateSheet[]; warnings: string[];
   created_at: string;
-  structure?: { sheets: SheetReport[]; help_sheet: string | null; hidden_sheets: string[]; defined_names: string[]; deadline: { text: string; date: string; year_inferred: boolean; cell: string; sheet?: string } | null; warnings: string[] };
+  structure?: { comparison?: { previous_template_id: string; previous_filename: string; diff: { breaking: boolean; sheets_added: string[]; sheets_removed: string[]; sheets: Record<string, Record<string, unknown>> } }; sheets: SheetReport[]; help_sheet: string | null; hidden_sheets: string[]; defined_names: string[]; deadline: { text: string; date: string; year_inferred: boolean; cell: string; sheet?: string } | null; warnings: string[] };
 }
-export interface MappingColumn { col: string; header: string; required: boolean; suggestion: string | null }
+export interface MappingColumn { col: string; header: string; required: boolean; suggestion: string | null; options?: string[] | null; strict?: boolean; max_length?: number | null; template_default?: string | null; help?: string }
 export interface Mapping {
   sheet_name: string; header_row: number; header_row_confirmed: boolean; header_candidates: { row: number }[];
   columns: MappingColumn[]; rules: Record<string, { source: string | null; default: string }>; source_fields: Record<string, string>;
@@ -105,7 +105,7 @@ export type BatchStatus = "draft" | "needs_fix" | "ready" | "exported" | "sent_e
 export interface Batch {
   id: string; name: string; status: BatchStatus; seller_account_id: string | null; seller_account_label: string | null;
   template_id: string | null; template_filename: string | null; template_expired: boolean; sheet_name: string; items: number;
-  validation: { products?: number; rows?: number; complete?: number; with_errors?: number; with_warnings?: number; errors_total?: number; ready?: boolean; validated_at?: string };
+  validation: { products?: number; rows?: number; complete?: number; with_errors?: number; with_warnings?: number; errors_total?: number; ready?: boolean; validated_at?: string; writer_available?: boolean };
   history: { at: string; by: string; event: string; [k: string]: unknown }[]; created_at: string; updated_at: string;
 }
 export interface RuleIssue { code: string; severity: "error" | "warning" | "info"; source: "interna" | "documentacao" | "template" | "hipotese"; message: string; fix: string; field: string; ref: string; sku: string }
@@ -114,6 +114,15 @@ export interface Validation {
   template_issues: RuleIssue[]; batch_issues: RuleIssue[];
   products: { product_id: string; sku: string; name: string; rows: number; errors: number; warnings: number; issues: RuleIssue[] }[];
 }
+
+export interface ExportRecord { id: string; sheet_name: string; rows: number; sha256: string; size_bytes: number; rules_applied: [string, number][]; checks: Record<string, unknown>; created_at: string }
+export type RuleScope = "organization" | "account" | "category" | "template" | "batch";
+export interface RuleDefinition { target: string; operation: string; params: Record<string, unknown>; condition: { when: string; field?: string; value?: string } }
+export interface Rule { id: string; name: string; scope: RuleScope; scope_ref: string; priority: number; status: "active" | "inactive"; version: number; definition: RuleDefinition; origin: string; origin_text: string; created_at: string; updated_at: string }
+export interface RuleVersion { version: number; definition: RuleDefinition; note: string; author: string | null; created_at: string }
+export interface Simulation { definition: RuleDefinition; official_conflict: string | null; conflicts: string[]; column: string | null; rows: { sku: string; before: string; after: string; changed: boolean }[]; changed: number; can_apply: boolean }
+export interface Interpretation { definition: RuleDefinition | null; scope: RuleScope; scope_ref: string; explanation: string; questions: string[]; confidence: string; engine: string; simulation?: Simulation }
+export interface ErrorItem { text: string; column: string | null; required: boolean; message: string | null; proposals: { label: string; definition: RuleDefinition; needs_value?: boolean; options?: string[] }[] }
 
 export const can = {
   write: (r?: Role) => r === "owner" || r === "admin" || r === "editor",

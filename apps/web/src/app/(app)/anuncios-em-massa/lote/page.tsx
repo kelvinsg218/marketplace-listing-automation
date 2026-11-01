@@ -4,13 +4,16 @@ import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Check, ChevronRight, Lock, Search } from "lucide-react";
-import { api, ApiError, can, type Batch, type Mapping, type ProductPage, type SellerAccount, type Template, type Validation } from "@/lib/api";
+import { api, ApiError, can, type Batch, type ExportRecord, type Mapping, type ProductPage, type SellerAccount, type Template, type Validation } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/use-api";
 import { BatchStatusBadge, fmtDate, IssueList, TemplateStatusBadge } from "@/components/listing-ui";
 import { Alert, Badge, Button, Card, cx, Input, PageHeader, Select, Skeleton } from "@/components/ui";
 
 type Step = { key: string; title: string; done: boolean; available: boolean };
+
+// Required columns the official file already pre-fills (e.g. "Novo", "Clássico") are not missing.
+const hasFileDefault = (v?: string | null) => !!v && v !== "Selecionar" && !v.startsWith("Insira ou selecione");
 
 function Kpi({ label, value, tone }: { label: string; value: number | string; tone?: "ok" | "danger" | "warn" }) {
   return (
@@ -49,7 +52,7 @@ function Wizard({ id }: { id: string }) {
 
   const accountTemplates = useMemo(() => (templates ?? []).filter((t) => t.seller_account_id === batch?.seller_account_id && t.status === "inspected"), [templates, batch]);
   const categorySheets = template?.sheets.filter((s) => !s.is_help && s.state === "visible") ?? [];
-  const requiredOpen = mapping ? mapping.columns.filter((c) => c.required && !mapping.rules[c.col]?.source && !mapping.rules[c.col]?.default?.trim()).length : 0;
+  const requiredOpen = mapping ? mapping.columns.filter((c) => c.required && !mapping.rules[c.col]?.source && !mapping.rules[c.col]?.default?.trim() && !hasFileDefault(c.template_default)).length : 0;
   const v = batch?.validation ?? {};
 
   if (error) return <Alert>{error}</Alert>;
@@ -181,7 +184,7 @@ function Wizard({ id }: { id: string }) {
             {step === 6 && (
               !validation ? <Alert tone="info">Rode a validação na etapa anterior.</Alert> : (
                 <div className="flex flex-col gap-3">
-                  <p className="text-sm text-muted">Corrija no catálogo: as alterações valem para todos os canais. Depois valide de novo.</p>
+                  <p className="text-sm text-muted">Corrija no catálogo (vale para todos os canais) ou crie uma regra no <Link className="underline" href={`/assistente/?lote=${batch.id}`}>Assistente de Correção</Link> (só deste lote ou permanente). Depois valide de novo.</p>
                   {validation.products.filter((p) => p.issues.some((i) => i.severity !== "info")).map((p) => (
                     <details key={p.product_id} className="rounded-md border border-line bg-bg-2 px-4 py-3" open={p.errors > 0}>
                       <summary className="cursor-pointer flex flex-wrap items-center gap-2 text-sm">
@@ -199,12 +202,7 @@ function Wizard({ id }: { id: string }) {
 
             {step === 7 && <Review base={base} enabled={!!mapping?.header_row_confirmed} />}
 
-            {step === 8 && (
-              <div className="flex flex-col gap-3 text-sm">
-                <Alert tone="info">A geração da planilha preenchida ainda não está liberada: o preenchimento só será implementado depois de analisar um template XLSX real baixado da sua conta. Exportar não publicaria anúncios — o envio é sempre seu, no site do Mercado Livre.</Alert>
-                <div><Button disabled title="Aguardando template oficial real">Gerar planilha preenchida</Button></div>
-              </div>
-            )}
+            {step === 8 && <ExportStep base={base} batch={batch} onBatch={setBatch} canWrite={can.write(role)} />}
 
             {step === 9 && (
               <div className="flex flex-col gap-3 text-sm">
@@ -222,12 +220,17 @@ function Wizard({ id }: { id: string }) {
             {step === 10 && (
               <div className="flex flex-col gap-3 text-sm">
                 <p className="text-muted">O Mercado Livre avisa por e-mail quando termina. Se houver erros, ele oferece um novo arquivo só com os anúncios não criados e a coluna “Resumo de erros” (P1 p.8).</p>
-                <Alert tone="info">A importação desse arquivo de erros depende de uma planilha de retorno real para conhecer o formato. Até lá, registre apenas o recebimento do e-mail.</Alert>
+                <Alert tone="info">A importação automática do arquivo de erros depende de uma planilha de retorno real para conhecer o formato. Enquanto isso, cole o conteúdo da coluna “Resumo de erros” no <Link className="underline" href={`/assistente/?lote=${batch.id}`}>Assistente de Correção</Link>.</Alert>
                 <div><Button disabled={batch.status !== "sent_external" || !can.write(role)} onClick={async () => { try { setBatch(await api<Batch>(`${base}/confirm-result`, { method: "POST", body: {} })); } catch (e) { setMsg({ tone: "danger", text: e instanceof ApiError ? e.message : "Falha." }); } }}>Recebi o e-mail de conclusão</Button></div>
               </div>
             )}
 
-            {step === 11 && <Alert tone="info">Reprocessamento: corrigir as linhas devolvidas pelo Mercado Livre e preparar nova planilha. Depende do importador de erros (planilha de retorno real) e do gerador (template real).</Alert>}
+            {step === 11 && (
+              <div className="flex flex-col gap-3 text-sm">
+                <p className="text-muted">Corrija os itens recusados com o Assistente de Correção (regra só para este lote ou regra permanente), valide de novo e gere uma nova planilha. Para um novo envio, crie um lote com os produtos recusados: lotes enviados ficam travados para preservar o histórico.</p>
+                <div><Link href={`/assistente/?lote=${batch.id}`}><Button variant="primary">Abrir Assistente de Correção</Button></Link></div>
+              </div>
+            )}
           </div>
 
           <div className="mt-8 flex justify-between border-t border-line pt-4">
@@ -245,6 +248,44 @@ function Wizard({ id }: { id: string }) {
         </details>
       )}
     </>
+  );
+}
+
+function ExportStep({ base, batch, onBatch, canWrite }: { base: string; batch: Batch; onBatch: (b: Batch) => void; canWrite: boolean }) {
+  const { data: exports, reload } = useApi<ExportRecord[]>(`${base}/exports`);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
+  const locked = ["sent_external", "result_received", "done"].includes(batch.status);
+  async function generate() {
+    setBusy(true); setMsg(null);
+    try {
+      const e = await api<ExportRecord>(`${base}/export`, { method: "POST" });
+      setMsg({ tone: "ok", text: `Planilha gerada: ${e.rows} linha(s), integridade verificada.` });
+      onBatch(await api<Batch>(base)); reload();
+    } catch (err) { setMsg({ tone: "danger", text: err instanceof ApiError ? err.message : "Falha ao gerar." }); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className="flex flex-col gap-4 text-sm">
+      <p className="text-muted">O MLA preenche uma <strong className="text-fg">cópia</strong> da planilha oficial da conta: só as células de dados mudam; abas, fórmulas, listas, validações e instruções ficam como o Mercado Livre enviou. Gerar o arquivo <strong className="text-fg">não publica</strong> nada.</p>
+      {batch.validation.writer_available === false && <Alert tone="danger">Este template não tem a estrutura oficial reconhecida; não é possível gerar a planilha.</Alert>}
+      {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
+      <div><Button variant="primary" busy={busy} disabled={!canWrite || locked} onClick={generate}>Validar e gerar planilha</Button></div>
+      {exports && exports.length > 0 && (
+        <ul className="flex flex-col gap-2">
+          {exports.map((e) => (
+            <li key={e.id} className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-bg-2 px-4 py-3">
+              <span className="font-medium">{new Date(e.created_at).toLocaleString("pt-BR")}</span>
+              <Badge>{e.rows} linha(s)</Badge><Badge tone="ok">integridade ok</Badge>
+              {e.rules_applied.length > 0 && <Badge tone="info">{e.rules_applied.length} regra(s) aplicada(s)</Badge>}
+              <span className="font-mono text-xs text-faint">SHA-256 {e.sha256.slice(0, 10)}…</span>
+              <a className="ml-auto text-accent hover:text-accent-2" href={`/api${base}/exports/${e.id}/file`}>Baixar XLSX para conferência</a>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-xs text-faint">Risco conhecido: as fórmulas auxiliares do arquivo são recalculadas ao abrir no Excel; ainda não sabemos se o Mercado Livre recalcula ao processar. Faça um envio de teste controlado antes de lotes grandes.</p>
+    </div>
   );
 }
 

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  Boxes, ChevronsUpDown, FileSpreadsheet, History, Images, LayoutDashboard, Layers, LogOut, Menu, Network, PackageOpen,
+  Boxes, ChevronsUpDown, FileSpreadsheet, History, Images, LayoutDashboard, LifeBuoy, Workflow, Layers, LogOut, Menu, Network, PackageOpen,
   Settings, Store, Upload, Users, Wrench, X,
 } from "lucide-react";
 import { useRequireSession, useSession } from "@/lib/session";
@@ -13,7 +13,7 @@ import { cx, Skeleton } from "./ui";
 
 interface NavItem { href: string; label: string; icon: React.ElementType; soon?: boolean }
 const NAV: { section: string; items: NavItem[] }[] = [
-  { section: "Visão geral", items: [{ href: "/painel/", label: "Painel", icon: LayoutDashboard }] },
+  { section: "", items: [{ href: "/painel/", label: "Painel", icon: LayoutDashboard }] },
   {
     section: "Catálogo", items: [
       { href: "/catalogo/", label: "Produtos", icon: Boxes },
@@ -27,6 +27,8 @@ const NAV: { section: string; items: NavItem[] }[] = [
       { href: "/anuncios-em-massa/", label: "Anúncios em massa", icon: Layers },
       { href: "/templates/", label: "Templates", icon: FileSpreadsheet },
       { href: "/lotes/", label: "Lotes e exportações", icon: PackageOpen },
+      { href: "/assistente/", label: "Assistente de Correção", icon: LifeBuoy },
+      { href: "/regras/", label: "Regras adaptativas", icon: Workflow },
       { href: "/marketplaces/", label: "Marketplaces", icon: Store },
     ],
   },
@@ -53,19 +55,19 @@ export function Logo({ className }: { className?: string }) {
 function Nav({ onNavigate }: { onNavigate?: () => void }) {
   const path = usePathname();
   return (
-    <nav aria-label="Principal" className="flex flex-col gap-6">
+    <nav aria-label="Principal" className="flex flex-col gap-4 [@media(max-height:820px)]:gap-3">
       {NAV.map((group) => (
         <div key={group.section}>
-          <p className="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">{group.section}</p>
+          {group.section && <p className="px-3 mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">{group.section}</p>}
           <ul className="flex flex-col gap-0.5">
             {group.items.map(({ href, label, icon: Icon, soon }) => {
               const active = path.startsWith(href);
               return (
                 <li key={href}>
                   <Link href={href} onClick={onNavigate} aria-current={active ? "page" : undefined}
-                    className={cx("group relative flex items-center gap-3 rounded-md px-3 h-9 text-sm transition-colors",
+                    className={cx("group relative flex items-center gap-3 rounded-md px-3 h-8 [@media(max-height:820px)]:h-7 text-sm transition-colors",
                       active ? "bg-card text-fg" : "text-muted hover:text-fg hover:bg-card/60")}>
-                    {active && <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-accent" aria-hidden />}
+                    {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-accent" aria-hidden />}
                     <Icon className={cx("size-[18px] shrink-0", active ? "text-accent" : "text-faint group-hover:text-muted")} aria-hidden />
                     <span className="min-w-0 truncate">{label}</span>
                     {soon && <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] font-medium text-faint border border-line rounded px-1.5 py-px">em breve</span>}
@@ -139,7 +141,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const sidebar = (
-    <div className="flex h-full flex-col gap-6 px-3 py-5">
+    <div className="flex h-full flex-col gap-4 px-3 py-4">
       <div className="px-2"><Logo /></div>
       <OrgSwitcher />
       <div className="flex-1 overflow-y-auto -mx-1 px-1"><Nav onNavigate={() => setMenuOpen(false)} /></div>

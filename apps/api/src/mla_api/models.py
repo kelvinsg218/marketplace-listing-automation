@@ -289,8 +289,66 @@ class ListingBatchItem(Base):
     product_id: Mapped[uuid.UUID] = _product_fk(index=False)
 
 
-# Tables protected by PostgreSQL row-level security (migrations 0001/0002). New organization-owned tables must be
+class ListingRule(Base):
+    """Adaptive rule (domain/adaptive_rules.py). The content lives in versions; this row is the current pointer."""
+    __tablename__ = "listing_rules"
+    __table_args__ = (
+        CheckConstraint("scope in ('organization','account','category','template','batch')", name="ck_rule_scope"),
+        CheckConstraint("status in ('active','inactive')", name="ck_rule_status"),
+        Index("ix_rules_org_scope", "organization_id", "scope", "scope_ref"),
+    )
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = _org_fk()
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    scope: Mapped[str] = mapped_column(String(16), nullable=False)
+    scope_ref: Mapped[str] = mapped_column(String(80), default="", nullable=False)  # id or category (sheet) name
+    priority: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
+    status: Mapped[str] = mapped_column(String(10), default="active", nullable=False)
+    current_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    origin: Mapped[str] = mapped_column(String(20), default="manual", nullable=False)  # manual | prompt | erro
+    origin_text: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow,
+                                                 nullable=False)
+
+
+class ListingRuleVersion(Base):
+    __tablename__ = "listing_rule_versions"
+    __table_args__ = (UniqueConstraint("rule_id", "version", name="uq_rule_version"),)
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = _org_fk()
+    rule_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("listing_rules.id", ondelete="CASCADE"), index=True,
+                                               nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    definition: Mapped[dict] = mapped_column(JSON, nullable=False)
+    note: Mapped[str] = mapped_column(String(300), default="", nullable=False)
+    author_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = _created()
+
+
+class BatchExport(Base):
+    """A generated official sheet. Generating it never means the listings were published."""
+    __tablename__ = "batch_exports"
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = _org_fk()
+    batch_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("listing_batches.id", ondelete="CASCADE"), index=True,
+                                                nullable=False)
+    template_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("marketplace_templates.id",
+                                                                     ondelete="SET NULL"))
+    sheet_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    rows: Mapped[int] = mapped_column(Integer, nullable=False)
+    rules_applied: Mapped[list] = mapped_column(JSON, default=list, nullable=False)  # [[rule_id, version], ...]
+    checks: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = _created()
+
+
+# Tables protected by PostgreSQL row-level security (migrations 0001-0003). New organization-owned tables must be
 # added here AND get a policy in their migration; tests/test_isolation.py checks the list against the metadata.
 TENANT_TABLES = ("products", "audit_events", "product_variants", "product_images", "product_channel_data",
                  "seller_accounts", "marketplace_templates", "template_mappings", "listing_batches",
-                 "listing_batch_items")
+                 "listing_batch_items", "listing_rules", "listing_rule_versions", "batch_exports")

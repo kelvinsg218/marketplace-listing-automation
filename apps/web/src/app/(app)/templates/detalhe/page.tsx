@@ -71,7 +71,8 @@ function MappingEditor({ t, sheet }: { t: Template; sheet: string }) {
   if (error) return <Alert>{error}</Alert>;
   if (loading && !data) return <Skeleton className="h-60" />;
   if (!data) return null;
-  const requiredOpen = data.columns.filter((c) => c.required && !rules[c.col]?.source && !rules[c.col]?.default?.trim());
+  const fileDefault = (v?: string | null) => !!v && v !== "Selecionar" && !v.startsWith("Insira ou selecione");
+  const requiredOpen = data.columns.filter((c) => c.required && !rules[c.col]?.source && !rules[c.col]?.default?.trim() && !fileDefault(c.template_default));
 
   async function save() {
     setMsg(null);
@@ -108,7 +109,7 @@ function MappingEditor({ t, sheet }: { t: Template; sheet: string }) {
               const r = rules[c.col] ?? { source: null, default: "" };
               const isAttr = r.source?.startsWith("attr:");
               return (
-                <tr key={c.col} className={cx("border-t border-line", c.required && !r.source && !r.default.trim() && "bg-danger/5")}>
+                <tr key={c.col} className={cx("border-t border-line", c.required && !r.source && !r.default.trim() && !fileDefault(c.template_default) && "bg-danger/5")}>
                   <td className="px-3 py-2 font-mono text-xs text-faint">{c.col}</td>
                   <td className="px-3 py-2"><span className="font-medium">{c.header}</span> {c.required && <Badge tone="danger" className="ml-1">Obrigatório</Badge>}
                     {!data.header_row_confirmed && c.suggestion && <Badge tone="info" className="ml-1">sugestão</Badge>}</td>
@@ -124,8 +125,20 @@ function MappingEditor({ t, sheet }: { t: Template; sheet: string }) {
                         onChange={(e) => setRules({ ...rules, [c.col]: { ...r, source: `attr:${e.target.value}` } })} />}
                     </div>
                   </td>
-                  <td className="px-3 py-2"><Input aria-label={`Valor padrão para ${c.header}`} className="h-8" disabled={!writable} value={r.default}
-                    onChange={(e) => setRules({ ...rules, [c.col]: { ...r, default: e.target.value } })} placeholder="Opcional" /></td>
+                  <td className="px-3 py-2">
+                    {c.options && c.options.length > 0 ? (
+                      <Select aria-label={`Valor padrão para ${c.header}`} className="h-8 w-full" disabled={!writable} value={r.default}
+                        onChange={(e) => setRules({ ...rules, [c.col]: { ...r, default: e.target.value } })}>
+                        <option value="">{c.template_default ? `Padrão do arquivo: ${c.template_default}` : "— sem valor padrão —"}</option>
+                        {c.options.filter((o) => o !== "Selecionar" && o !== "Insira ou selecione um valor").map((o) => <option key={o} value={o}>{o}</option>)}
+                      </Select>
+                    ) : (
+                      <Input aria-label={`Valor padrão para ${c.header}`} className="h-8" disabled={!writable} value={r.default}
+                        onChange={(e) => setRules({ ...rules, [c.col]: { ...r, default: e.target.value } })}
+                        placeholder={c.template_default ? `Padrão do arquivo: ${c.template_default}` : "Opcional"} />
+                    )}
+                    {c.help && <p className="mt-1 text-[11px] text-faint line-clamp-2" title={c.help}>{c.help}</p>}
+                  </td>
                 </tr>
               );
             })}
@@ -181,6 +194,20 @@ function Detail() {
           <PageHeader title={t.original_filename} description={`${t.seller_account_label} · ${SOURCE_LABEL[t.source]} · SHA-256 ${t.sha256.slice(0, 12)}…`}
             actions={<><TemplateStatusBadge t={t} /><a href={`/api/orgs/${org!.id}/templates/${t.id}/file`}><Button size="sm"><Download className="size-4" />Original</Button></a></>} />
           {t.warnings.length > 0 && <div className="mb-4 flex flex-col gap-2">{t.warnings.map((w) => <Alert key={w} tone="info">{w}</Alert>)}</div>}
+          {t.structure?.comparison && (
+            <div className="mb-4">
+              <Alert tone={t.structure.comparison.diff.breaking ? "danger" : "info"}>
+                Comparado com o template anterior desta conta ({t.structure.comparison.previous_filename}):{" "}
+                {t.structure.comparison.diff.breaking ? "há mudanças que exigem revisar mapeamentos" : "sem mudanças incompatíveis"}.
+                {Object.entries(t.structure.comparison.diff.sheets).map(([sheet, ch]) => {
+                  const parts = Object.entries(ch).filter(([, v]) => Array.isArray(v) ? v.length : v).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`);
+                  return parts.length ? <span key={sheet} className="block text-xs mt-1">{sheet} — {parts.join(" · ")}</span> : null;
+                })}
+                {t.structure.comparison.diff.sheets_added.length > 0 && <span className="block text-xs mt-1">Abas novas: {t.structure.comparison.diff.sheets_added.join(", ")}</span>}
+                {t.structure.comparison.diff.sheets_removed.length > 0 && <span className="block text-xs mt-1">Abas removidas: {t.structure.comparison.diff.sheets_removed.join(", ")}</span>}
+              </Alert>
+            </div>
+          )}
           <Alert tone="info">Leitura somente: estes dados descrevem o arquivo enviado. Nada aqui foi confirmado pelo Mercado Livre como regra geral; cada categoria tem seu próprio formato (P2 p.2).</Alert>
           {t.status === "inspected" && (
             <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_360px] items-start">

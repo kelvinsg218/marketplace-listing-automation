@@ -31,6 +31,22 @@ const ACTIONS: Record<string, string> = {
   "member.added": "adicionou um membro",
   "member.removed": "removeu um membro",
   "member.role_changed": "alterou o papel de um membro",
+  "variant.created": "criou a variação",
+  "variant.updated": "editou a variação",
+  "variant.deleted": "excluiu a variação",
+  "image.uploaded": "enviou uma foto do produto",
+  "image.urls_added": "registrou URLs de fotos do produto",
+  "image.deleted": "excluiu uma foto do produto",
+  "seller_account.created": "cadastrou uma conta de vendedor",
+  "seller_account.deleted": "removeu uma conta de vendedor",
+  "template.uploaded": "registrou um template oficial",
+  "template.updated": "atualizou um template",
+  "template.mapping_saved": "salvou um mapeamento",
+  "batch.created": "criou um lote",
+  "batch.exported": "gerou a planilha de um lote",
+  "rule.created": "criou uma regra",
+  "rule.updated": "alterou uma regra",
+  "rule.reverted": "reverteu uma regra",
 };
 
 export function describeEvent(action: string, details: Record<string, unknown>): string {

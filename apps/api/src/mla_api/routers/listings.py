@@ -5,6 +5,7 @@ Rules from the official help pages are cited as P1/P2/P3 + page (docs/MLA_MERCAD
 from __future__ import annotations
 
 import hashlib
+import re
 import uuid
 from datetime import date
 from typing import Literal
@@ -19,11 +20,15 @@ from mla_api.db import utcnow
 from mla_api.deps import OrgContext, require
 from mla_api.domain.listing_rules import (SOURCE_FIELDS, Issue, TemplateContext, batch_size_issue, preview_rows,
                                           sheet_rows, suggest_source, validate_product, validate_template)
-from mla_api.domain.template_inspector import MAX_FILE_BYTES, TemplateRejected, inspect_workbook, sheet_columns
-from mla_api.models import (BatchStatus, ListingBatch, ListingBatchItem, MarketplaceTemplate, Product,
+from mla_api.domain import workbook_writer
+from mla_api.domain.sheet_builder import build_rows, validate_rows
+from mla_api.domain.template_inspector import (MAX_FILE_BYTES, TemplateRejected, column_specs, compare_reports,
+                                              inspect_workbook, sheet_columns)
+from mla_api.models import (BatchExport, BatchStatus, ListingBatch, ListingBatchItem, MarketplaceTemplate, Product,
                             ProductStatus, SellerAccount, TemplateMapping, TemplateStatus)
 from mla_api.schemas import UtcDatetime
 from mla_api.services.listing_data import load_products
+from mla_api.services.rules_service import rules_for_batch
 
 router = APIRouter(prefix="/api/orgs/{org_id}", tags=["bulk-listing"])
 MARKETPLACE = "mercadolivre"
@@ -176,6 +181,15 @@ async def upload_template(file: UploadFile = File(...), seller_account_id: uuid.
         structure=report, deadline_text=deadline.get("text", ""),
         deadline_date=date.fromisoformat(deadline["date"]) if deadline.get("date") else None,
         deadline_confirmed=bool(deadline) and not deadline.get("year_inferred", True), uploaded_by=ctx.user.id)
+    previous = ctx.db.scalar(select(MarketplaceTemplate).where(
+        MarketplaceTemplate.organization_id == ctx.org_id, MarketplaceTemplate.seller_account_id == account.id,
+        MarketplaceTemplate.status == TemplateStatus.INSPECTED).order_by(MarketplaceTemplate.created_at.desc()))
+    if previous is not None and state == TemplateStatus.INSPECTED:
+        # Change detection between versions: facts only (what changed), never assumptions about why.
+        report["comparison"] = {"previous_template_id": str(previous.id),
+                                "previous_filename": previous.original_filename,
+                                "diff": compare_reports(previous.structure or {}, report)}
+        t.structure = report
     ctx.db.add(t)
     audit.record(ctx.db, "template.uploaded", user_id=ctx.user.id, org_id=ctx.org_id, target_type="template",
                  target_id=t.id, filename=name, sha256=sha[:12], status=state)
@@ -255,13 +269,19 @@ def get_mapping(template_id: uuid.UUID, sheet: str, header_row: int | None = Non
     s = _sheet(t, sheet)
     saved = _mapping(ctx, t.id, sheet)
     candidates = s.get("header_candidates", [])
-    row = header_row or (saved.header_row if saved else (candidates[0]["row"] if candidates else 1))
+    layout_row = (s.get("layout") or {}).get("header_row")
+    row = header_row or (saved.header_row if saved else (layout_row or (candidates[0]["row"] if candidates else 1)))
     try:
         columns = sheet_columns(t.structure, sheet, row)
     except IndexError:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Linha de cabeçalho fora da pré-visualização.")
+    specs = column_specs(t.structure, sheet) if row == layout_row else {}
     for c in columns:
         c["suggestion"] = suggest_source(c["header"])
+        spec = specs.get(c["col"]) or {}
+        c.update({"options": spec.get("options"), "strict": spec.get("strict", False),
+                  "max_length": spec.get("max_length"), "template_default": spec.get("default"),
+                  "help": spec.get("help", "")})
     rules = saved.rules if saved and saved.header_row == row else {}
     return ColumnsOut(sheet_name=sheet, header_row=row, header_row_confirmed=bool(saved and saved.header_row == row),
                       header_candidates=candidates, columns=columns, rules=rules, source_fields=SOURCE_FIELDS)
@@ -310,6 +330,33 @@ def save_mapping(template_id: uuid.UUID, body: MappingIn,
                  target_id=t.id, sheet=body.sheet_name, mapped=len(rules))
     ctx.db.commit()
     return get_mapping(template_id, body.sheet_name, body.header_row, ctx)
+
+
+@router.post("/templates/{template_id}/mapping/copy-from/{source_id}", response_model=ColumnsOut)
+def copy_mapping(template_id: uuid.UUID, source_id: uuid.UUID, sheet: str,
+                 ctx: OrgContext = Depends(require("catalog.write"))) -> ColumnsOut:
+    """Reuses a mapping from another template of the organization, matching columns by header text (letters may
+    move between versions). Unmatched columns are left for review."""
+    t, src = _template(ctx, template_id), _template(ctx, source_id)
+    s = _sheet(t, sheet)
+    old = _mapping(ctx, src.id, sheet)
+    if old is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "O template de origem não tem mapeamento para esta aba.")
+    layout_row = (s.get("layout") or {}).get("header_row") or old.header_row
+    columns = sheet_columns(t.structure, sheet, layout_row)
+    by_header = {norm_header(c["header"]): c["col"] for c in columns}
+    old_headers = {c["col"]: c["header"] for c in old.columns}
+    rules = {}
+    for col, rule in old.rules.items():
+        new_col = by_header.get(norm_header(old_headers.get(col, "")))
+        if new_col:
+            rules[new_col] = rule
+    return save_mapping(template_id, MappingIn(sheet_name=sheet, header_row=layout_row,
+                                               rules={k: RuleIn(**v) for k, v in rules.items()}), ctx)
+
+
+def norm_header(text: str) -> str:
+    return " ".join(str(text).lower().split())
 
 
 # --- batches ----------------------------------------------------------------------------------------------------
@@ -497,6 +544,27 @@ def _context(ctx: OrgContext, b: ListingBatch) -> TemplateContext | None:
                            columns=m.columns if m else [], rules=m.rules if m else {})
 
 
+def _layout(ctx: OrgContext, b: ListingBatch) -> tuple[MarketplaceTemplate, dict] | None:
+    """Official layout of the batch's sheet (inspector v2), when known."""
+    if not b.template_id or not b.sheet_name:
+        return None
+    t = _template(ctx, b.template_id)
+    sheet = next((s for s in (t.structure or {}).get("sheets", []) if s["name"] == b.sheet_name), None)
+    layout = (sheet or {}).get("layout")
+    return (t, layout) if layout and layout.get("data_start_row") else None
+
+
+def _build(ctx: OrgContext, b: ListingBatch, products):
+    found = _layout(ctx, b)
+    if not found:
+        return None, None, []
+    t, layout = found
+    m = _mapping(ctx, t.id, b.sheet_name)
+    rows = build_rows(products, layout, m.rules if m else {}, rules_for_batch(ctx.db, ctx.org_id, b))
+    validate_rows(rows, layout, products)
+    return t, layout, rows
+
+
 class ProductReport(BaseModel):
     product_id: str
     sku: str
@@ -514,38 +582,56 @@ class ValidationOut(BaseModel):
     products: list[ProductReport]
 
 
-@router.post("/batches/{batch_id}/validate", response_model=ValidationOut)
-def validate_batch(batch_id: uuid.UUID, ctx: OrgContext = Depends(require("catalog.write"))) -> ValidationOut:
-    b = _batch(ctx, batch_id)
+def _run_validation(ctx: OrgContext, b: ListingBatch):
     ids = list(ctx.db.scalars(select(ListingBatchItem.product_id).where(ListingBatchItem.batch_id == b.id)))
     products = load_products(ctx.db, ctx.org_id, ids)
     template_issues = validate_template(_context(ctx, b), _today())
     if not b.seller_account_id:
         template_issues.insert(0, Issue("account_missing", "error", "documentacao", "Nenhuma conta de vendedor.",
                                         "Escolha a conta que baixou a planilha.", "account", "P1 p.8"))
-    rows = sum(sheet_rows(p) for p in products)
-    batch_issues = [i for i in [batch_size_issue(rows)] if i]
+    t, layout, sheet_rows_built = _build(ctx, b, products)
+    if layout:
+        # With the official layout, required columns are checked per row (template defaults + mapping + rules),
+        # which is more precise than "column has a mapping": the file pre-fills some required columns itself.
+        template_issues = [i for i in template_issues if i.code != "required_unmapped"]
+    row_count = len(sheet_rows_built) if layout else sum(sheet_rows(p) for p in products)
+    batch_issues = [i for i in [batch_size_issue(row_count)] if i]
+    if layout and row_count > (layout.get("capacity") or 0):
+        batch_issues.append(Issue("sheet_capacity", "error", "template",
+                                  f"A aba comporta {layout['capacity']} linhas; o lote gera {row_count}.",
+                                  "Divida o lote.", "batch", "Template: linhas com fórmulas"))
     if not products:
         batch_issues.append(Issue("batch_empty", "error", "interna", "Nenhum produto selecionado.",
                                   "Selecione produtos do catálogo.", "items"))
+    per_product: dict[str, list[Issue]] = {}
+    for r in sheet_rows_built:
+        per_product.setdefault(r.product_id, []).extend(r.issues)
     reports = []
     for p in products:
-        issues = validate_product(p)
+        # With an official layout the template decides required columns; the generic photo/brand advice stays.
+        issues = validate_product(p) + per_product.get(p.id, [])
         reports.append(ProductReport(product_id=p.id, sku=p.sku, name=p.name, rows=sheet_rows(p),
                                      errors=sum(i.severity == "error" for i in issues),
                                      warnings=sum(i.severity == "warning" for i in issues),
                                      issues=[i.as_dict() for i in issues]))
     reports.sort(key=lambda r: (-r.errors, -r.warnings, r.name))
     blocking = any(i.severity == "error" for i in template_issues + batch_issues) or any(r.errors for r in reports)
-    summary = {"validated_at": utcnow().isoformat(), "products": len(products), "rows": rows,
+    summary = {"validated_at": utcnow().isoformat(), "products": len(products), "rows": row_count,
                "complete": sum(1 for r in reports if not r.errors and not r.warnings),
                "with_errors": sum(1 for r in reports if r.errors),
                "with_warnings": sum(1 for r in reports if r.warnings and not r.errors),
                "errors_total": sum(r.errors for r in reports) + sum(i.severity == "error"
                                                                     for i in template_issues + batch_issues),
-               "ready": not blocking}
+               "ready": not blocking, "writer_available": bool(layout)}
+    return products, template_issues, batch_issues, reports, summary, (t, layout, sheet_rows_built)
+
+
+@router.post("/batches/{batch_id}/validate", response_model=ValidationOut)
+def validate_batch(batch_id: uuid.UUID, ctx: OrgContext = Depends(require("catalog.write"))) -> ValidationOut:
+    b = _batch(ctx, batch_id)
+    _, template_issues, batch_issues, reports, summary, _ = _run_validation(ctx, b)
     if b.status not in LOCKED and b.status != BatchStatus.EXPORTED:
-        new = BatchStatus.READY if not blocking else BatchStatus.NEEDS_FIX
+        new = BatchStatus.READY if summary["ready"] else BatchStatus.NEEDS_FIX
         if new != b.status:
             _log(ctx, b, "status", status=new)
         b.status = new
@@ -558,24 +644,101 @@ def validate_batch(batch_id: uuid.UUID, ctx: OrgContext = Depends(require("catal
 @router.get("/batches/{batch_id}/preview")
 def preview_batch(batch_id: uuid.UUID, limit: int = 50,
                   ctx: OrgContext = Depends(require("catalog.read"))) -> dict:
-    """Values the writer would put in each data row. Nothing is written to any file."""
+    """Values that go into each data row (official layout: final cell values, MLA-written ones flagged)."""
     b = _batch(ctx, batch_id)
-    t = _context(ctx, b)
-    if t is None or not t.columns:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Confirme template, aba e mapeamento antes de revisar.")
     ids = list(ctx.db.scalars(select(ListingBatchItem.product_id).where(ListingBatchItem.batch_id == b.id)))
-    rows = preview_rows(load_products(ctx.db, ctx.org_id, ids), t)
-    return {"columns": t.columns, "rows": rows[:max(1, min(limit, 500))], "total_rows": len(rows)}
+    products = load_products(ctx.db, ctx.org_id, ids)
+    t, layout, rows = _build(ctx, b, products)
+    limit = max(1, min(limit, 500))
+    if layout:
+        cols = [{"col": c["col"], "header": c["header"], "required": c["required"]}
+                for c in layout["columns"] if c.get("writable")]
+        return {"columns": cols, "total_rows": len(rows), "first_row": layout["data_start_row"],
+                "rows": [{"product_id": r.product_id, "sku": r.sku, "values": {k: str(v) for k, v in r.final.items()},
+                          "written": sorted(r.values), "rules": [list(a) for a in r.applied]} for r in rows[:limit]]}
+    tc = _context(ctx, b)
+    if tc is None or not tc.columns:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Confirme template, aba e mapeamento antes de revisar.")
+    prev = preview_rows(products, tc)
+    return {"columns": tc.columns, "rows": prev[:limit], "total_rows": len(prev)}
 
 
-WRITER_PENDING = ("A geração da planilha oficial ainda não está disponível: o preenchimento só será liberado depois "
-                  "de analisar um template XLSX real baixado da sua conta (docs/MLA_MERCADOLIVRE_RESEARCH.md §8).")
+class ExportOut(BaseModel):
+    id: uuid.UUID
+    sheet_name: str
+    rows: int
+    sha256: str
+    size_bytes: int
+    rules_applied: list
+    checks: dict
+    created_at: UtcDatetime
 
 
-@router.post("/batches/{batch_id}/export")
-def export_batch(batch_id: uuid.UUID, ctx: OrgContext = Depends(require("catalog.write"))) -> dict:
-    _batch(ctx, batch_id)
-    raise HTTPException(status.HTTP_409_CONFLICT, WRITER_PENDING)
+@router.post("/batches/{batch_id}/export", response_model=ExportOut, status_code=201)
+def export_batch(batch_id: uuid.UUID, ctx: OrgContext = Depends(require("catalog.write"))) -> ExportOut:
+    """Fills a copy of the account's official file. Never publishes anything."""
+    b = _batch(ctx, batch_id)
+    _editable(b)
+    _, template_issues, batch_issues, reports, summary, (t, layout, rows) = _run_validation(ctx, b)
+    if not layout:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Este template não tem a estrutura oficial reconhecida; "
+                                                      "não é possível gerar a planilha.")
+    if not summary["ready"]:
+        b.validation, b.status = summary, BatchStatus.NEEDS_FIX
+        ctx.db.commit()
+        raise HTTPException(status.HTTP_409_CONFLICT, f"O lote tem {summary['errors_total']} erro(s); corrija antes "
+                                                      "de gerar a planilha.")
+    original = ctx.storage.read(ctx.org_id, t.storage_key)
+    if hashlib.sha256(original).hexdigest() != t.sha256:
+        raise HTTPException(status.HTTP_409_CONFLICT, "O arquivo original do template não confere com o registrado.")
+    try:
+        result = workbook_writer.fill(original, b.sheet_name, layout, [r.values for r in rows])
+    except workbook_writer.WriterError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+    problems = workbook_writer.verify(original, result.data, result.sheet_part)
+    if problems:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            "A verificação de integridade falhou; nada foi gerado: " + "; ".join(problems[:3]))
+    export_id = uuid.uuid4()
+    key = ctx.storage.put(ctx.org_id, "exports", f"{export_id}.xlsx", result.data)
+    applied = sorted({tuple(a) for r in rows for a in r.applied})
+    e = BatchExport(id=export_id, organization_id=ctx.org_id, batch_id=b.id, template_id=t.id,
+                    sheet_name=b.sheet_name, storage_key=key, sha256=hashlib.sha256(result.data).hexdigest(),
+                    size_bytes=len(result.data), rows=result.rows_written, rules_applied=[list(a) for a in applied],
+                    checks={"integrity": "ok", "cells_written": result.cells_written,
+                            "recalc_on_open": True, "template_sha256": t.sha256}, created_by=ctx.user.id)
+    ctx.db.add(e)
+    b.status, b.validation = BatchStatus.EXPORTED, summary
+    _log(ctx, b, "exported", rows=result.rows_written, rules=len(applied), export=str(export_id))
+    audit.record(ctx.db, "batch.exported", user_id=ctx.user.id, org_id=ctx.org_id, target_type="batch",
+                 target_id=b.id, rows=result.rows_written)
+    ctx.db.commit()
+    return ExportOut(id=e.id, sheet_name=e.sheet_name, rows=e.rows, sha256=e.sha256, size_bytes=e.size_bytes,
+                     rules_applied=e.rules_applied, checks=e.checks, created_at=e.created_at)
+
+
+@router.get("/batches/{batch_id}/exports", response_model=list[ExportOut])
+def list_exports(batch_id: uuid.UUID, ctx: OrgContext = Depends(require("catalog.read"))) -> list[ExportOut]:
+    b = _batch(ctx, batch_id)
+    rows = ctx.db.scalars(select(BatchExport).where(BatchExport.batch_id == b.id,
+                                                    BatchExport.organization_id == ctx.org_id)
+                          .order_by(BatchExport.created_at.desc())).all()
+    return [ExportOut(id=e.id, sheet_name=e.sheet_name, rows=e.rows, sha256=e.sha256, size_bytes=e.size_bytes,
+                      rules_applied=e.rules_applied, checks=e.checks, created_at=e.created_at) for e in rows]
+
+
+@router.get("/batches/{batch_id}/exports/{export_id}/file")
+def download_export(batch_id: uuid.UUID, export_id: uuid.UUID,
+                    ctx: OrgContext = Depends(require("catalog.read"))) -> Response:
+    b = _batch(ctx, batch_id)
+    e = ctx.db.scalar(select(BatchExport).where(BatchExport.id == export_id, BatchExport.batch_id == b.id,
+                                                BatchExport.organization_id == ctx.org_id))
+    if e is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Exportação não encontrada.")
+    data = ctx.storage.read(ctx.org_id, e.storage_key)
+    name = re.sub(r"[^A-Za-z0-9._-]+", "-", f"MLA-{b.name}")[:60] + f"-{e.created_at:%Y%m%d-%H%M}.xlsx"
+    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 class ConfirmIn(BaseModel):

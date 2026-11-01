@@ -126,7 +126,7 @@ with sync_playwright() as p:
     expect(page.get_by_text("BIS-1-CHOC")).to_be_visible()
     shot(page, "27-wizard-review")
     nav.get_by_role("button", name="Exportar").click()
-    expect(page.get_by_role("button", name="Gerar planilha preenchida")).to_be_disabled()
+    expect(page.get_by_text("não tem a estrutura oficial reconhecida", exact=False).first).to_be_visible()
     nav.get_by_role("button", name="Enviar ao ML").click()
     expect(page.get_by_role("button", name="Confirmo que enviei a planilha")).to_be_disabled()
     shot(page, "28-wizard-send")

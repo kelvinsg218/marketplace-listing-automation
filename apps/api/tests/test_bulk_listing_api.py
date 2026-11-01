@@ -170,7 +170,8 @@ def test_batch_flow_validation_preview_and_no_fake_publication(setup):
     assert prev["rows"][0]["values"]["D"] == "9.90"
 
     exp = api.post(f"{url}/export")
-    assert exp.status_code == 409 and "template XLSX real" in exp.json()["detail"]
+    # This synthetic file lacks the official data-row structure, so the writer refuses instead of guessing.
+    assert exp.status_code == 409 and "estrutura oficial" in exp.json()["detail"]
     # Sent / result states need an exported batch and explicit confirmation: never inferred.
     assert api.post(f"{url}/confirm-sent", json={}).status_code == 409
     assert api.post(f"{url}/confirm-result", json={}).status_code == 409
