@@ -1,87 +1,100 @@
-# MLA — Marketplace Listing Automation
+# MLA — Marketplace Listing Automation (Web 2.0)
 
-Aplicativo desktop para Windows que mantém um catálogo mestre de produtos, importa bases completas de clientes,
-prepara anúncios por marketplace e por conta e automatiza o preenchimento no navegador, parando para a sua
-revisão antes de qualquer publicação.
+Plataforma web multiempresa para preparar anúncios em massa no Mercado Livre a partir de um catálogo de produtos.
 
-Apresentação visual (capturas de tela e página para portfólio): repositório
-[marketplace-listing-automation-showcase](https://github.com/kelvinsg218/marketplace-listing-automation-showcase).
+O cliente organiza o catálogo e escolhe produtos, conta e categoria. O MLA preenche uma **cópia da planilha oficial**
+que a própria conta baixou no Anunciador em Massa. Antes do envio, ele valida os dados contra as regras do arquivo e
+da documentação oficial. Quando o Mercado Livre recusa algo, a correção é feita na web, por regras ("só neste lote"
+ou permanentes). O Excel vira formato de troca de arquivos: o cliente não precisa preenchê-lo à mão.
 
-## Status
-v0.1.2-beta: aplicativo Windows instalável (`MLA-Setup-<versão>.exe`, por usuário) com atualização pelo próprio
-app e conexão ao **Mercado Livre pela API oficial** (importar anúncios, sugerir categoria, conferir atributos e
-validar sem publicar). 256 testes automatizados aprovados (unidade, interface e ponta a ponta no Edge com o
-marketplace simulado) e um cenário de 300 produtos fictícios medido ([docs/DEMO_COMERCIAL.md](docs/DEMO_COMERCIAL.md)).
-A **publicação real no Mercado Livre está desligada** e não foi testada com conta real; Shopee sem integração.
-Instalação e atualizações: [docs/BUILD_E_DISTRIBUICAO.md](docs/BUILD_E_DISTRIBUICAO.md); Mercado Livre:
-[docs/GUIA_MERCADO_LIVRE.md](docs/GUIA_MERCADO_LIVRE.md); estado detalhado: [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md).
+> **Estado:** 2.0.0-alpha. Funciona de ponta a ponta em desenvolvimento, mas a planilha gerada **ainda não passou por
+> um envio real** ao Mercado Livre. Nada é publicado automaticamente.
 
-## O que já funciona
-- **Empresas (clientes):** uma pasta de dados isolada por empresa (catálogo, imagens, contas, sessões, backups,
-  logs) e troca de empresa dentro do app.
-- **Histórico e correção em lote:** cada alteração de produto registrada campo a campo com a origem; edição em
-  lote de campos descritivos com pré-visualização (preço, estoque, GTIN e SKU nunca em lote).
-- **Exportação:** planilha intermediária de anúncios (XLSX/CSV, uma linha por variação, fotos copiadas, abas de
-  pendências e resumo) e relatório de pendências do catálogo para o fornecedor.
-- **Catálogo mestre:** SKU principal e de variações, código do fabricante, GTIN/EAN (dígito verificador conferido),
-  marca, modelo, categoria, fornecedor, nome comercial; custo, preço de venda e promocional, estoque e estoque
-  mínimo, unidade, garantia, condição, situação comercial; descrição original e técnica, material, cor, peso,
-  dimensões, especificações, atributos personalizados, referências do fabricante, observações internas; imagens,
-  variações, arquivos técnicos e mídias pendentes. Campos novos opcionais; checagem ao vivo do que falta.
-- **Busca e organização:** busca por nome, SKU (inclusive de variação), GTIN, código do fabricante, marca ou
-  fornecedor; filtros por situação, mídia pendente e grupo; carregamento incremental; duplicação, exclusão e
-  exportação em CSV ou JSON (o JSON inclui variações; as imagens são copiadas junto).
-- **Central de Importações:** CSV, XLSX, JSON, XML, PDF (tabela ou ficha técnica), ZIP com planilha e fotos e pasta
-  de imagens pelo SKU. Prévia, reconhecimento de colunas com confirmação dos nomes ambíguos, modelos reutilizáveis,
-  validação por linha, duplicatas, variações pelo SKU pai, alterações exibidas “atual → arquivo”, decisões
-  criar/atualizar/ignorar, gravação em uma única transação (cancelar não altera nada), relatório e histórico.
-  Executáveis, scripts e planilhas com macro em ZIPs são ignorados e nunca executados.
-- **Compatibilidades:** marca, modelo, versão, anos, referência, fonte e verificação; dados do cliente entram
-  confirmados, demais fontes como não verificadas; nada é inferido; importação em massa.
-- **Preparação de anúncios:** um anúncio por produto, marketplace e conta, guardando só o que difere do produto;
-  estados Rascunho, Incompleto, Pronto para revisão, Aprovado, Na fila, Em execução, Publicado confirmado, Falha e
-  Requer intervenção; aprovação desfeita se o conteúdo mudar; nota de completude calculada sem IA.
-- **Contas de marketplace:** várias contas, conta padrão, URL do vendedor validada pelo domínio oficial, navegador
-  Edge dedicado e isolado por conta, teste de conexão com login manual.
-- **Automação:** fila persistente (um item por vez), pausa, retomada, cancelamento, recuperação após fechar o app,
-  prevenção de duplicados, capturas e registro de cada etapa, revisão humana obrigatória antes de publicar;
-  execução individual, em grupo ou em lote. Grupos de produtos com ordem e marketplaces de destino.
-- **Dashboard e histórico:** pipeline do catálogo e dos anúncios, pendências, situação por marketplace, histórico
-  com filtros, detalhes, reexecução segura e exportação CSV.
-- **Marketplace simulado** embutido para testar o fluxo inteiro sem publicar nada de verdade.
-- **Estrutura para inteligência de mercado e IA** (sem telas, sem coleta e sem IA ativa): URLs de referência e
-  observações com fonte e data, contrato para coletores com trava de permissão, sugestões de IA guardadas à parte
-  e aplicadas só com aceite, bloqueio de provedores externos sem autorização.
+## Funcionalidades
 
-## Princípios
-- Nada é publicado sem aprovação; “publicado” só com confirmação do marketplace.
-- Login, CAPTCHA e verificações são sempre feitos pelo usuário.
-- Dados locais em `%LOCALAPPDATA%\MLA`, com backup automático antes de cada atualização do banco.
-- Importações nunca apagam registros nem substituem dados sem mostrar a alteração.
-- Dados do cliente, informações externas e sugestões de IA ficam separados.
+| Área | O que faz |
+|---|---|
+| Contas e organizações | Cadastro, login, sessões seguras, redefinição de senha, papéis (proprietário, administrador, editor, leitor), auditoria |
+| Isolamento entre empresas | Rotas por organização, filtros em todas as consultas e Row-Level Security no PostgreSQL |
+| Catálogo mestre | Produtos, variações, preços, estoque, GTIN com dígito verificador, atributos, Código de catálogo ML, painel de qualidade |
+| Central de Fotos | Arquivos verificados pelo conteúdo, URLs oficiais do Gestor de fotos, ordem, pendências |
+| Templates oficiais | Registro do XLSX baixado da conta (original imutável + SHA-256), inspeção da estrutura (abas, obrigatórios, listas, limites, fórmulas, prazo), comparação entre versões |
+| Mapeamento | Campos do catálogo → colunas oficiais, com listas e padrões do próprio arquivo e reaproveitamento por nome de coluna |
+| Validação | Regras internas, da documentação (com página citada) e do template; hipóteses nunca bloqueiam |
+| Writer oficial | Preenche só as células de dados de uma cópia; abas, fórmulas, validações e imagens ficam idênticas; verificação de integridade a cada exportação |
+| Anúncios em massa | Assistente de 12 etapas, lotes rastreáveis; envio e resultado só mudam com confirmação do usuário |
+| Regras adaptativas | Por lote, categoria, template, conta ou organização; simulação antes/depois, aprovação, versões e reversão |
+| Assistente de Correção | Lê o "Resumo de erros" colado ou um pedido em texto e propõe uma regra (interpretação local, sem IA externa) |
+| Importação (base) | Leitores CSV/XLSX/JSON/XML/PDF, ZIP seguro, reconhecimento de colunas e parsing de valores. A tela da Central de Importações ainda não existe |
 
-## Ainda não disponível
-- Publicação real no **Mercado Livre** e na **Shopee** (depende de autorização da conta e de validação
-  supervisionada do formulário real ou da API oficial); preenchimento do modelo oficial de envio em massa.
-- Coleta automática de dados de concorrentes e agentes de IA (apenas a estrutura existe).
-- Imagens embutidas em XLSX, download de imagens por link, PDF digitalizado (OCR) e foto por variação automática.
-- Assinatura digital do executável, atualização automática, cobrança e servidor de licenças.
-- Lista completa: [docs/comercial/LIMITACOES_CONHECIDAS.md](docs/comercial/LIMITACOES_CONHECIDAS.md).
+## Arquitetura
 
-## Tecnologia
-Python 3.13 · PySide6 (Qt) · SQLite (WAL, migrações versionadas) · Playwright com Microsoft Edge · openpyxl ·
-pypdf · pytest.
+```
+apps/web  (Next.js 15, React 19, Tailwind 4; exportação estática)
+   │  mesma origem, cookie HttpOnly
+apps/api  (FastAPI, Pydantic 2, SQLAlchemy 2, Alembic)
+   ├── domain/     regras puras: catálogo, inspetor de templates, writer, sheet builder, regras adaptativas
+   ├── importing/  leitores e parsing de arquivos de catálogo
+   ├── routers/    auth, organizações, catálogo, fotos, templates, lotes, regras
+   └── storage     arquivos por organização (orgs/<id>/…), download só por rota autorizada
+PostgreSQL 17/18 (RLS)   ·   infra/postgres/init.sql   ·   docker-compose.yml (ainda não executado)
+```
 
-## Começar
-- Cliente: [instalação](docs/comercial/GUIA_INSTALACAO.md), [manual rápido](docs/comercial/MANUAL_RAPIDO.md) e
-  [guia de importação](docs/comercial/GUIA_IMPORTACAO.md).
-- Usuário (guia completo): [docs/USER_GUIDE.md](docs/USER_GUIDE.md) e [docs/INSTALLATION.md](docs/INSTALLATION.md).
-- Desenvolvimento: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md), [docs/TESTING.md](docs/TESTING.md),
-  [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DECISIONS.md](docs/DECISIONS.md).
-- Estado do projeto: [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md) e [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md).
+Detalhes: [docs/MLA_WEB_ARCHITECTURE.md](docs/MLA_WEB_ARCHITECTURE.md) e decisões em [docs/DECISIONS.md](docs/DECISIONS.md).
+
+## Executar localmente (Windows, PowerShell)
+
+Pré-requisitos: Python 3.13 e Node 22+. O PostgreSQL é opcional em desenvolvimento: sem ele, a API usa SQLite em
+`apps/api/.data/`.
 
 ```powershell
-.venv\Scripts\python -m pip install -e .[dev]
-.venv\Scripts\python -m mla                       # abre o aplicativo
-.venv\Scripts\python -m pytest -m "not browser"   # testes rápidos
+# API (porta 8000)
+cd apps\api
+py -3.13 -m venv .venv; .venv\Scripts\python -m pip install -e ".[dev]"
+copy .env.example .env
+.venv\Scripts\python -m alembic upgrade head
+$env:PYTHONPATH="src"; .venv\Scripts\python -m uvicorn mla_api.asgi:app --reload --reload-dir src
+
+# Web (porta 3000, outro terminal)
+cd apps\web
+npm install; npm run dev
 ```
+
+Abra http://localhost:3000 e crie uma conta. A documentação da API fica em http://localhost:8000/api/docs, só em
+desenvolvimento.
+
+### Banco de dados
+- **Desenvolvimento:** SQLite automático, ou PostgreSQL definindo `MLA_DATABASE_URL` no `apps/api/.env`.
+- **PostgreSQL local:** `psql -U postgres -h localhost -f infra/postgres/init.sql` cria o papel `mla`, que **não** é
+  superusuário (superusuários ignoram RLS), e os bancos `mla` e `mla_test`.
+- **Produção:** a API recusa SQLite e cookie sem `Secure`.
+
+## Testes
+
+```powershell
+cd apps\api; .venv\Scripts\python -m pytest                       # API
+$env:MLA_TEST_DATABASE_URL="postgresql+psycopg://mla:mla-dev-password@localhost:5432/mla_test"
+.venv\Scripts\python -m pytest -m postgres                          # RLS real
+cd ..\web; npm run typecheck; npm run build
+```
+
+Os fluxos no navegador (Playwright + Edge) ficam em `apps/web/e2e/`, com dependências em `requirements.txt`. Os
+testes usam **somente dados fictícios** e um XLSX sintético que reproduz o layout oficial. Templates reais de
+vendedores nunca entram no repositório.
+
+## Limitações conhecidas
+- A planilha gerada ainda não foi aceita num envio real; também não se sabe se o Mercado Livre recalcula as fórmulas
+  do arquivo.
+- O arquivo de retorno com "Resumo de erros" ainda não é importado automaticamente; hoje o conteúdo é colado no
+  Assistente.
+- A publicação pela API oficial (OAuth) está só planejada; o envio é manual, no site do Mercado Livre.
+- Faltam a tela da Central de Importações, as compatibilidades veiculares e a fila de processamento.
+- O RLS não foi executado em PostgreSQL real, o Docker Compose não foi executado e o Firefox não foi testado.
+
+## Próximas entregas
+1. Envio controlado e autorizado para confirmar a compatibilidade.
+2. Importador do arquivo de retorno.
+3. Adaptador da API oficial do Mercado Livre (OAuth + confirmação antes de publicar).
+4. Central de Importações com processamento em segundo plano.
+
+Roteiro completo: [docs/MLA_WEB_ROADMAP.md](docs/MLA_WEB_ROADMAP.md).

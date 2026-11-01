@@ -16,7 +16,6 @@ Status: **Ativo** (installed and validated) · **Dormente** (in `tools/skills-ca
 | Name | Source @ commit | Type / location | Function | Status |
 |---|---|---|---|---|
 | frontend-design | anthropics/claude-code @3deb873 (plugins/frontend-design) | skill, `.claude/skills/` | Design/UX | Ativo |
-| pyside6-design | own | skill, `.claude/skills/` | Design/UX (Qt tokens, pitfalls, review loop) | Ativo |
 | webapp-testing | anthropics/skills @dbd4588 | skill + `scripts/with_server.py` (inspected) | Testes/Automação | Ativo |
 | systematic-debugging | obra/superpowers v7.0.0 @bb92a77 | skill (4 files) | Depuração | Ativo |
 | test-driven-development | obra/superpowers @bb92a77 | skill | Testes | Ativo |
@@ -26,8 +25,6 @@ Status: **Ativo** (installed and validated) · **Dormente** (in `tools/skills-ca
 | token-economy | own | skill, `~/.claude/skills/` (user scope, reusable) | Otimização de tokens | Ativo |
 | writing-plans | obra/superpowers @bb92a77 | skill | Planejamento | Dormente |
 | python-patterns | affaan-m/ECC @b92f181 | skill | Programação | Dormente |
-| windows-desktop-e2e | affaan-m/ECC @b92f181 | skill | Testes E2E Qt (fase 7) | Dormente |
-| generating-python-installer | affaan-m/ECC @b92f181 | skill | Distribuição (fase 7) | Dormente |
 | Superpowers plugin (full) | obra/superpowers | plugin + SessionStart hook | — | Não instalado (D-001) |
 | ECC (full) | affaan-m/ECC (renamed from everything-claude-code) | 311 skills, 71 agents, hooks | — | Não instalado (D-001) |
 | awesome-claude-skills | ComposioHQ | catalog | Descoberta | Não instalado (consulta) |

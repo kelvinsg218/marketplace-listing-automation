@@ -127,6 +127,21 @@ Citação: `P2 p.3` = PDF P2, página 3; "(captura)" = a informação vem de uma
    rascunho, se houver essa opção. Sem ela o Error Importer não pode ser finalizado.
 3. Com (1): rodar o Template Inspector do MLA nos arquivos e preencher a seção 9.
 
-## 9. Estrutura confirmada por template real
+## 9. Estrutura confirmada por template real (TPL)
 
-*Vazia.* Nenhum XLSX oficial foi analisado ainda.
+Um XLSX real foi analisado em 01/11/2026. Detalhes em [MLA_OFFICIAL_TEMPLATE_ANALYSIS.md](MLA_OFFICIAL_TEMPLATE_ANALYSIS.md),
+sem dados da conta.
+
+| Item | Classe agora | Achado |
+|---|---|---|
+| E2/E3 | TPL | Aba Ajuda + uma aba por categoria + aba muito oculta "extra info" (listas e vínculo da conta) + "Informações legais" |
+| E6/E7 | TPL | Cabeçalho na linha 3, "Obrigatório" na 4, ajuda na 5, links na 6; dados a partir da linha 7, 8 ou 9 conforme a aba; cerca de 995 linhas por aba |
+| E1 | TPL | Prazo: Ajuda C26 "Faça isso antes de 1 de dezembro", confirmado por uma data técnica na aba oculta |
+| C2–C4 | TPL | Abas de catálogo começam por "Código do catálogo ML"; a coluna oculta BUYBOX_FORMULA marca a linha como catálogo (código + "Novo") ou comum |
+| V1/V3 | TPL (parcial) | Variações = linhas com o **mesmo título** e o **mesmo preço**, diferindo nas colunas "Varia por: …"; SKU, estoque e fotos próprios. O agrupamento interno do ML continua PEND |
+| G1/G6 | TPL | Coluna "Fotos" obrigatória; URLs separadas por vírgula; **prazo de 2 dias** para colar as URLs e enviar (Ajuda G45) |
+| Preço | TPL | **Mínimo 8,00** (formatação condicional) |
+| Título | TPL | Máximo de 60 caracteres |
+| Listas | TPL | Listas fechadas com alerta de erro (Condição, Tipo de anúncio, Forma de envio, Loja Oficial…) e abertas (cores, tamanhos, marcas) |
+| E9 | **Não está no template baixado** | "Resumo de erros" deve existir só no arquivo de retorno → continua PEND |
+| E11 | TPL | Sem macros, sem proteção, sem intervalos nomeados; formatação condicional + validações de dados; cerca de 3–4 mil fórmulas por aba |

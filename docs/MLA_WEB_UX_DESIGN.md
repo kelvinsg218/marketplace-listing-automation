@@ -80,3 +80,21 @@ mostra o progresso salvo no lote e permite voltar. A validação agrupa por seve
 linha do produto.
 
 Capturas de referência: geradas pelo roteiro E2E (ver MLA_WEB_ROADMAP.md, "Como testar").
+
+## Atualização de 01/11/2026 (writer, regras e navegadores)
+
+- **Novas telas:** Assistente de Correção (erro colado ou pedido em texto → proposta → simulação antes/depois →
+  "Aplicar somente neste lote" ou "Salvar como regra para a categoria" → aprovar) e Regras adaptativas (escopo,
+  versão, ativar/desativar, histórico e reverter).
+- **Na etapa Exportar do lote:** "Validar e gerar planilha", lista de arquivos gerados com "integridade ok", regras
+  aplicadas, SHA-256 e download para conferência. O aviso sobre o recálculo de fórmulas fica visível.
+- **No mapeamento:** quando o arquivo traz uma lista oficial, o valor padrão vira lista suspensa; aparecem o padrão do
+  próprio arquivo e a ajuda da coluna. Ao registrar uma nova versão do template, um aviso mostra o que mudou.
+- **Edge × Chrome:** medições automatizadas (fonte, largura da barra lateral, largura do conteúdo, medida de texto,
+  transbordo) **idênticas** em 1366×768, 1440×900 e 1920×1080 (Edge 156 e Chrome 155, perfis limpos). A diferença
+  conhecida entre os dois no Windows 11 são as barras de rolagem: o Edge usa barras finas sobrepostas e o Chrome usa
+  barras clássicas largas e claras. Agora as barras seguem o tema (`scrollbar-color`/`scrollbar-width` +
+  `scrollbar-gutter: stable`). Diferenças vindas de zoom, fontes ou extensões do perfil do usuário não são
+  reproduzíveis em teste automatizado. Firefox não foi testado (não está instalado).
+- **1366×768:** com os itens novos, o menu lateral não cabia (Organização e Configurações ficavam escondidas). Agora
+  é compacto em telas de até 820 px de altura; confirmado no Edge e no Chrome.

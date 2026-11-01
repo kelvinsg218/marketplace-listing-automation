@@ -149,8 +149,11 @@ Regras citadas como P1/P2/P3 + página: ver MLA_MERCADOLIVRE_RESEARCH.md.
 | **Attribute Mapper** | `domain/listing_rules.py` + `/templates/{id}/mapping` | Implementado. Usa a linha de cabeçalho confirmada, as colunas lidas do arquivo, "Obrigatório" na célula do cabeçalho ou logo abaixo dela, sugestões por sinônimo (só sugestão, salva apenas com confirmação), campo do catálogo, `attr:<nome>` ou valor padrão. O mapeamento é reutilizado por todos os lotes do template |
 | **Validation Engine** | `domain/listing_rules.py` | Implementado. Cada problema traz severidade, **fonte** (`interna`, `documentacao`, `template`, `hipotese`), referência (PDF e página) e a correção. Hipóteses nunca geram erro |
 | **Preview** | `GET /batches/{id}/preview` | Implementado: valores por linha (uma por variação, P1 p.6), fotos unidas por vírgula (P3 p.4). Nenhum arquivo é escrito |
-| **Workbook Writer** | — | **Não implementado**, de propósito: `POST /batches/{id}/export` responde 409 até analisarmos um XLSX real (D-025). Requisito: escrever só nas células de dados de uma cópia, sem tocar abas, cabeçalhos, instruções, validações ou fórmulas (P1 p.6, P2 p.2) |
-| **Error Importer** | — | **Não implementado**: depende de uma planilha de retorno real com "Resumo de erros" (P1 p.8) |
+| **Workbook Writer** | `domain/workbook_writer.py` + `POST /batches/{id}/export` | **Implementado** sobre a estrutura de um XLSX real. Grava por patch do XML só nas células de dados graváveis de uma cópia; as outras partes ficam byte a byte; verificação de integridade a cada exportação; arquivo guardado por organização e baixado por rota autorizada. Testado com um arquivo sintético que reproduz o layout real e com a cópia sanitizada do real. **Ainda não aceito pelo ML** (falta envio controlado) |
+| **Error Importer** | `POST /batches/{id}/error-summary` | **Parcial:** o usuário cola o conteúdo de "Resumo de erros" e o MLA reconhece as colunas e propõe correções. A importação do arquivo de retorno espera um exemplo real |
+| **Sheet Builder** | `domain/sheet_builder.py` | Monta as linhas (catálogo + mapeamento + regras + padrões do arquivo) e valida contra o template: obrigatórios, listas fechadas, tamanho, mínimo, números, variações com mesmo título/preço, aviso dos 2 dias |
+| **Regras adaptativas** | `domain/adaptive_rules.py`, `routers/rules.py`, tabelas `listing_rules` + `listing_rule_versions` | Ver §9 |
+| **Comparação de versões** | `template_inspector.compare_reports` | Ao registrar um novo template da mesma conta, mostra abas e colunas adicionadas/removidas/movidas, colunas que passaram a ser obrigatórias, listas alteradas, mudança de cabeçalho/início e marca "incompatível". O mapeamento pode ser copiado por nome de cabeçalho |
 
 Estados do lote: `draft → needs_fix | ready` (pela validação; qualquer mudança de conteúdo volta para `draft`) →
 `exported` (writer, pendente) → `sent_external` (somente com `confirm-sent` do usuário) → `result_received`
@@ -164,3 +167,45 @@ upload para o Gestor, porque não existe integração oficial documentada.
 
 **Permissões:** contas de vendedor exigem `members.manage` (admin/owner); templates, mapeamentos e lotes exigem
 `catalog.write` (editor+); leitura, `catalog.read`.
+
+## 9. Regras adaptativas e Assistente de Correção
+
+- **A regra é dado, não código:** operação de uma lista fechada (copiar campo, valor fixo, valor padrão se vazio,
+  normalizar, limitar, trocar valores, prefixo/sufixo, substituir trecho literal, exigir) + parâmetros + condição
+  (sempre, alvo vazio, campo vazio/preenchido/igual/contém). Esquema fechado: sem eval, sem código gerado, sem SQL, sem
+  regex do usuário.
+- **Alvo:** a coluna pelo **nome do cabeçalho**, que sobrevive a mudanças de posição. Só colunas graváveis: colunas
+  auxiliares, calculadas e a estrutura oficial são recusadas. Valor fora de uma lista oficial fechada ou acima do
+  limite oficial é recusado na simulação ("conflito com exigência oficial").
+- **Escopos e ordem (a última vence):** mapeamento < organização < conta < categoria (aba) < template < lote. Regra de
+  sistema não está disponível para clientes. A validação oficial roda **depois** das regras, sempre.
+- **Ciclo:**
+  - pedido em texto ou erro colado → proposta;
+  - **simulação antes/depois** + conflito oficial + conflito entre regras;
+  - **aprovação explícita** (`approved: true`) → versão 1;
+  - cada edição gera nova versão; "reverter" cria uma versão nova copiando a antiga, sem sobrescrever o histórico;
+  - desativar/ativar;
+  - cada exportação registra `[regra, versão]` aplicados (`batch_exports.rules_applied`).
+- **Interpretação de texto:** determinística (palavras-chave PT-BR), sem IA externa. Ela reconhece colunas da aba,
+  campos e atributos do catálogo, valores entre aspas, "quando estiver vazio", maiúsculas, limite de caracteres e o
+  escopo ("daqui para frente" = categoria; "só neste lote" = lote). Quando falta informação, devolve perguntas em vez
+  de adivinhar. Uma IA externa fica para depois, opcional e com consentimento explícito (D-028).
+
+## 10. Integração com contas do Mercado Livre (plano)
+
+- **Conta = identificação.** A URL da loja não dá acesso a nada. O MLA nunca pede senha, cookie nem token copiado do
+  navegador.
+- **Autorização oficial:** OAuth 2.0 + PKCE do Mercado Livre. O app desktop já implementa isso
+  (`src/mla/integrations/mercadolivre.py`): troca de código, renovação, sugestão de categoria/atributos, validação sem
+  publicar. Na web, os tokens ficam cifrados por organização (chave em gestor de segredos), com escopo mínimo e
+  desconexão que revoga e apaga.
+- **Estratégia A, planilha (implementada até a geração):** o MLA gera o arquivo; o envio é feito pelo usuário no
+  Anunciador em massa. Não encontramos API pública para enviar a planilha, então não há upload automático.
+- **Estratégia B, API de anúncios (adaptador separado, a fazer):**
+  - `POST /items` com validação prévia (`/items/validate`, já usada no desktop) e fotos por `/pictures`;
+  - consulta de status por item;
+  - cada publicação exige a confirmação da seção 8.4 do pedido (conta, quantidade, produtos, preços, estoque,
+    modalidade, tarifas do template quando conhecidas).
+
+  É outra operação, não "a planilha por API". O portal de desenvolvedores devolveu 403 ao acesso automatizado
+  (D-025); limites e recursos em lote ainda precisam ser confirmados na documentação aberta pelo usuário.

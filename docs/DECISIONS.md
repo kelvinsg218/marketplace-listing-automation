@@ -1,5 +1,8 @@
 # Decisions (newest last)
 
+D-001…D-020 date from the discontinued desktop app (history only; its code is in the git history before
+D-030). Decisions from D-021 on apply to MLA Web 2.0.
+
 **D-001 (2026-10-12) Skills: vendor selected files, no whole plugins.** Copied individual skills (pinned commits in
 TOOLS_INVENTORY.md) into `.claude/skills/`; others dormant in `tools/skills-catalog/`. Rejected: installing the
 Superpowers plugin (its SessionStart hook injects ~700 tokens every session and mandates skill checks on every
@@ -138,3 +141,30 @@ inspector is read-only and only reports markers with coordinates; header rows ar
 a year is stored as inferred until confirmed. Photos are official Gestor URLs joined by commas (P3 p.4); the
 10-photo group limit warns, never limits the catalog. Batch states past "exported" only change on explicit user
 confirmation. Writer and error importer stay unimplemented (export answers 409) until real XLSX files are analysed.
+
+**D-027 (2026-11-01) Writer = XML patch of a copy, never an openpyxl save.** A real template (9 sheets, a very hidden
+list sheet with the account binding, 8 images, ~3-4k formulas per category sheet) showed openpyxl would drop
+drawings/images and rewrite the package. The writer changes only writable data cells of one sheet XML (inline
+strings, styles kept, text never becomes a formula), sets fullCalcOnLoad and strips stale cached results in written
+rows; every other ZIP part is byte-identical and an integrity check runs on each export. Data start row, capacity,
+required/strict/limits come from the inspector (layout), never hard-coded. Open risk: whether ML recalculates formulas
+(cached BUYBOX values) — needs a controlled acceptance upload.
+
+**D-028 (2026-11-01) Adaptive rules are data with a closed schema; text interpretation is deterministic.** Operations
+from a whitelist, target by header text, writable columns only, official lists/limits enforced at simulation and
+again by validation after rules. Scope precedence mapping < organization < account < category < template < batch.
+Explicit approval, versions on every change, revert creates a new version. No external AI by default; an optional
+provider later requires explicit consent (same principle as desktop D-016).
+
+**D-029 (2026-11-01) Real seller files stay out of the repo.** The original template and its sanitized copy live in
+`docs/ml-research/` (ignored). The sanitizer replaces the hidden binding row and official store names and refuses to
+write if any original value survives. Committed tests use a synthetic file that mirrors the real layout; the test on
+the sanitized real copy runs only where it exists. Hidden sheets are never previewed by the inspector.
+
+**D-030 (2026-11-01) Desktop discontinued; MLA Web 2.0 is the only product.** Removed `src/mla` (PySide6 UI, local
+Edge automation, SQLite persistence, licensing, updater), desktop tests, packaging (`mla.spec`, `installer/`, root
+`pyproject.toml`), demo and desktop docs; a few useful docs moved to `docs/archive/`. Pure business logic was migrated
+first into `apps/api/src/mla_api/importing` and `domain/image_info.py` with its pure tests (no web code imported the
+desktop package). Desktop work that was never committed was saved locally (`local-archive/`, git-ignored), not lost.
+Import service, compatibilities, field history and the ML API client are rebuilt on the web when needed (inventory in
+MLA_LEGACY_MIGRATION.md).
