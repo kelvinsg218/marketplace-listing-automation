@@ -28,6 +28,7 @@ from mla_api.models import (BatchExport, BatchStatus, ListingBatch, ListingBatch
                             ProductStatus, SellerAccount, TemplateMapping, TemplateStatus)
 from mla_api.schemas import UtcDatetime
 from mla_api.services.listing_data import load_products
+from mla_api.routers.products import category_condition
 from mla_api.services.rules_service import rules_for_batch
 
 router = APIRouter(prefix="/api/orgs/{org_id}", tags=["bulk-listing"])
@@ -372,6 +373,7 @@ class BatchPatch(BaseModel):
     seller_account_id: uuid.UUID | None = None
     template_id: uuid.UUID | None = None
     sheet_name: str | None = Field(default=None, max_length=64)
+    last_phase: int | None = Field(default=None, ge=1, le=5)
 
 
 class BatchOut(BaseModel):
@@ -388,6 +390,9 @@ class BatchOut(BaseModel):
     items: int
     validation: dict
     history: list[dict]
+    archived: bool = False
+    last_phase: int = 1
+    exports: int = 0
     created_at: UtcDatetime
     updated_at: UtcDatetime
 
@@ -409,6 +414,9 @@ def _batch_out(ctx: OrgContext, b: ListingBatch) -> BatchOut:
                     template_id=b.template_id, template_filename=template.original_filename if template else None,
                     template_expired=bool(template and template.deadline_date and template.deadline_date < _today()),
                     sheet_name=b.sheet_name, items=items or 0, validation=b.validation or {}, history=b.history or [],
+                    archived=b.archived_at is not None, last_phase=b.last_phase or 1,
+                    exports=ctx.db.scalar(select(func.count()).select_from(BatchExport)
+                                          .where(BatchExport.batch_id == b.id)) or 0,
                     created_at=b.created_at, updated_at=b.updated_at)
 
 
@@ -429,10 +437,64 @@ def _reset(ctx: OrgContext, b: ListingBatch) -> None:
 
 
 @router.get("/batches", response_model=list[BatchOut])
-def list_batches(ctx: OrgContext = Depends(require("catalog.read"))) -> list[BatchOut]:
-    rows = ctx.db.scalars(select(ListingBatch).where(ListingBatch.organization_id == ctx.org_id)
-                          .order_by(ListingBatch.updated_at.desc())).all()
+def list_batches(ctx: OrgContext = Depends(require("catalog.read")), archived: bool = False) -> list[BatchOut]:
+    cond = [ListingBatch.organization_id == ctx.org_id,
+            ListingBatch.archived_at.is_not(None) if archived else ListingBatch.archived_at.is_(None)]
+    rows = ctx.db.scalars(select(ListingBatch).where(*cond).order_by(ListingBatch.updated_at.desc())).all()
     return [_batch_out(ctx, b) for b in rows]
+
+
+DELETABLE = {BatchStatus.DRAFT, BatchStatus.NEEDS_FIX, BatchStatus.READY}
+
+
+@router.post("/batches/{batch_id}/duplicate", response_model=BatchOut, status_code=201)
+def duplicate_batch(batch_id: uuid.UUID, ctx: OrgContext = Depends(require("catalog.write"))) -> BatchOut:
+    """New draft with the same account, template, sheet and products (never the exports or the history)."""
+    src = _batch(ctx, batch_id)
+    b = ListingBatch(organization_id=ctx.org_id, name=f"{src.name} (cópia)"[:120], marketplace=src.marketplace,
+                     seller_account_id=src.seller_account_id, template_id=src.template_id, sheet_name=src.sheet_name,
+                     status=BatchStatus.DRAFT, validation={}, history=[], created_by=ctx.user.id)
+    _log(ctx, b, "created", duplicated_from=src.name)
+    ctx.db.add(b)
+    ctx.db.flush()
+    for pid in ctx.db.scalars(select(ListingBatchItem.product_id).where(ListingBatchItem.batch_id == src.id)):
+        ctx.db.add(ListingBatchItem(organization_id=ctx.org_id, batch_id=b.id, product_id=pid))
+    audit.record(ctx.db, "batch.duplicated", user_id=ctx.user.id, org_id=ctx.org_id, target_type="batch",
+                 target_id=b.id, source=str(src.id))
+    ctx.db.commit()
+    return _batch_out(ctx, b)
+
+
+@router.delete("/batches/{batch_id}", status_code=204, response_class=Response, response_model=None)
+def delete_batch(batch_id: uuid.UUID, ctx: OrgContext = Depends(require("catalog.write"))) -> None:
+    """Only drafts that never produced a file can be deleted; anything else keeps its history (archive it)."""
+    b = _batch(ctx, batch_id)
+    has_exports = ctx.db.scalar(select(func.count()).select_from(BatchExport).where(BatchExport.batch_id == b.id))
+    if b.status not in DELETABLE or has_exports:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Este lote já gerou planilha ou foi enviado; arquive-o para "
+                                                      "preservar o histórico.")
+    audit.record(ctx.db, "batch.deleted", user_id=ctx.user.id, org_id=ctx.org_id, target_type="batch",
+                 target_id=b.id, name=b.name)
+    ctx.db.delete(b)
+    ctx.db.commit()
+
+
+@router.post("/batches/{batch_id}/archive", response_model=BatchOut)
+def archive_batch(batch_id: uuid.UUID, ctx: OrgContext = Depends(require("catalog.write"))) -> BatchOut:
+    b = _batch(ctx, batch_id)
+    b.archived_at = utcnow()
+    _log(ctx, b, "archived")
+    ctx.db.commit()
+    return _batch_out(ctx, b)
+
+
+@router.post("/batches/{batch_id}/unarchive", response_model=BatchOut)
+def unarchive_batch(batch_id: uuid.UUID, ctx: OrgContext = Depends(require("catalog.write"))) -> BatchOut:
+    b = _batch(ctx, batch_id)
+    b.archived_at = None
+    _log(ctx, b, "unarchived")
+    ctx.db.commit()
+    return _batch_out(ctx, b)
 
 
 @router.post("/batches", response_model=BatchOut, status_code=201)
@@ -456,8 +518,14 @@ def get_batch(batch_id: uuid.UUID, ctx: OrgContext = Depends(require("catalog.re
 def update_batch(batch_id: uuid.UUID, body: BatchPatch,
                  ctx: OrgContext = Depends(require("catalog.write"))) -> BatchOut:
     b = _batch(ctx, batch_id)
+    if body.model_fields_set == {"last_phase"}:  # remembering where the user stopped never locks or resets
+        b.last_phase = body.last_phase
+        ctx.db.commit()
+        return _batch_out(ctx, b)
     _editable(b)
     sent = body.model_fields_set
+    if body.last_phase:
+        b.last_phase = body.last_phase
     if body.name:
         b.name = body.name.strip()
     if "seller_account_id" in sent:
@@ -508,6 +576,11 @@ def set_items(batch_id: uuid.UUID, body: ItemsIn, ctx: OrgContext = Depends(requ
             cond.append(or_(Product.name.ilike(like), Product.sku.ilike(like), Product.brand.ilike(like)))
         if body.all_matching.get("status") in {s.value for s in ProductStatus}:
             cond.append(Product.status == body.all_matching["status"])
+        if body.all_matching.get("category_id"):
+            try:
+                cond.append(category_condition(ctx, uuid.UUID(str(body.all_matching["category_id"]))))
+            except ValueError:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Categoria inválida.")
         ids |= set(ctx.db.scalars(select(Product.id).where(*cond)))
     # Only ids of this organization survive (foreign ids are silently dropped, never linked).
     valid = set(ctx.db.scalars(select(Product.id).where(Product.organization_id == ctx.org_id,

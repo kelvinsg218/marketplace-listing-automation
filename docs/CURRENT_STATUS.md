@@ -12,6 +12,7 @@ anúncios em massa e fluxo oficial ok. Edge × Chrome: layout idêntico em 1366�
 | Isolamento | Aplicação: testado, inclusive regras e exportações. RLS (13 tabelas): escrito, **não executado** (papel `mla` não criado) |
 | Central de Importações | XLSX/CSV/JSON/XML com simulação, processamento em segundo plano e relatório |
 | Classificação | Categorias internas + classificação explicável + fila de revisão |
+| Gestão de lotes | Continuar, renomear, duplicar, excluir rascunho, arquivar; assistente em 5 fases |
 | Compatibilidades, fila/worker | Não iniciados |
 | Firefox | Não testado (não instalado) |
 

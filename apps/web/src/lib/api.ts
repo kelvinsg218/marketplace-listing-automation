@@ -107,6 +107,7 @@ export interface Batch {
   template_id: string | null; template_filename: string | null; template_expired: boolean; sheet_name: string; items: number;
   validation: { products?: number; rows?: number; complete?: number; with_errors?: number; with_warnings?: number; errors_total?: number; ready?: boolean; validated_at?: string; writer_available?: boolean };
   history: { at: string; by: string; event: string; [k: string]: unknown }[]; created_at: string; updated_at: string;
+  archived: boolean; last_phase: number; exports: number;
 }
 export interface RuleIssue { code: string; severity: "error" | "warning" | "info"; source: "interna" | "documentacao" | "template" | "hipotese"; message: string; fix: string; field: string; ref: string; sku: string }
 export interface Validation {

@@ -8,7 +8,7 @@ Atualizado em 02/11/2026. Status: ✅ concluída e testada · 🟡 parcial · �
 | 2. Central de Importações | ✅ publicada (`e689cdc`) | XLSX/CSV/JSON/XML; análise, abas, prévia, mapeamento sugerido (sinônimos), perfis salvos, simulação sem gravar, processamento em segundo plano em blocos de 200, progresso, cancelamento, histórico, relatório por linha, SKU repetido no arquivo, atualização só com confirmação (só campos preenchidos), variações por "produto pai", zeros à esquerda preservados, URLs de imagem da base guardadas como externas | `test_catalog_import.py` (6, inclui 1.000 linhas em 0,6 s) + E2E `catalog_flow.py` (100 produtos) | PDF e ZIP fora da tela; compatibilidades na importação; fila durável (hoje BackgroundTasks no mesmo processo) | Fila PostgreSQL + worker separado |
 | 3. Classificação inteligente | ✅ publicada (commit "feat: add intelligent product categorization and review") | Árvore interna por organização (exemplo opcional), regras por expressão/palavra/exclusão, pontuação explicável, alta/necessita confirmação/não classificado, fila de revisão, confirmação individual e em lote, confirmados nunca alterados, alteração de regra auditada com o valor anterior, categoria oficial do ML separada e "não confirmada" até o usuário confirmar | `test_classification.py` (14, inclui 5.000 produtos em ~11 s) + E2E (84/100 com alta confiança, 16 corretamente sem categoria) | Reverter regra pela interface (hoje via auditoria); classificação em lote por regra de "semelhantes" | Ligar categoria interna → template/aba do ML no lote |
 | 4. Central de Imagens / Estúdio de IA | ⏳ | (Central de Fotos atual: arquivo + URL do Gestor) | — | Visualizador, versões, aprovação, provedores de IA com consentimento | Modelo de versões de imagem |
-| 5. Anúncios em massa (melhorias) | 🟡 | Writer, regras e assistente prontos | — | Ações por lote (renomear, duplicar, excluir rascunho, arquivar); fluxo em 5 fases | Menu de ações por lote |
+| 5. Anúncios em massa (melhorias) | ✅ local, **sem commit** | Continuar de onde parou, renomear, duplicar, excluir rascunho (só sem exportações), arquivar/desarquivar; assistente em 5 fases (mesmas validações); filtro por categoria nos produtos | `test_batch_management.py` (4), `official_flow.py`, `bulk_flow.py` | Nenhuma | Autorizar commit |
 | 6. Contas reais do ML (OAuth) | ⏳ | Cadastro nominal de contas | — | OAuth web com tokens cifrados | Portar o cliente OAuth do desktop (histórico do git) |
 | 7. Importador de erros | ⛔ falta um arquivo de retorno real | Assistente aceita o "Resumo de erros" colado | — | Ler o arquivo devolvido pelo ML | Aguardar um exemplo real |
 | 8. Segurança | 🟡 | Isolamento na aplicação testado em todos os módulos; uploads verificados por conteúdo e tamanho | — | **RLS em PostgreSQL real** (papel `mla` não criado) | Rodar `infra/postgres/init.sql` |
@@ -24,3 +24,11 @@ Atualizado em 02/11/2026. Status: ✅ concluída e testada · 🟡 parcial · �
 - **Web:** `app/(app)/importacoes/page.tsx` (substitui o "em breve"), `app/(app)/categorias/page.tsx`, botão
   "Importar produtos" no catálogo, menu.
 - **E2E:** `apps/web/e2e/catalog_flow.py`.
+
+## Arquivos da etapa 5 (gestão de lotes)
+
+- **API:** `models.py` (`ListingBatch.archived_at`, `last_phase`), migração `0006_batch_archive_resume.py`,
+  `routers/listings.py` (duplicar, excluir, arquivar, desarquivar, `last_phase`, filtro por categoria),
+  `routers/products.py` (`category_condition`). Testes: `tests/test_batch_management.py`.
+- **Web:** `anuncios-em-massa/page.tsx` (menu de ações, ativos/arquivados), `anuncios-em-massa/lote/page.tsx`
+  (5 fases, retomada), `lib/api.ts`. E2E: `official_flow.py`, `bulk_flow.py`.

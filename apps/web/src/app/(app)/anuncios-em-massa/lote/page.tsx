@@ -12,6 +12,15 @@ import { Alert, Badge, Button, Card, cx, Input, PageHeader, Select, Skeleton } f
 
 type Step = { key: string; title: string; done: boolean; available: boolean };
 
+// Five phases for the user; the twelve technical steps (and their validations) live inside them.
+const PHASES: { title: string; hint: string; steps: number[] }[] = [
+  { title: "Conta e marketplace", hint: "Destino e conta", steps: [0, 1] },
+  { title: "Produtos", hint: "Escolha no Catálogo Mestre", steps: [3] },
+  { title: "Preparação", hint: "Template oficial e campos", steps: [2, 4] },
+  { title: "Revisão", hint: "Validar, corrigir e conferir", steps: [5, 6, 7] },
+  { title: "Exportação e publicação", hint: "Gerar, enviar e acompanhar", steps: [8, 9, 10, 11] },
+];
+
 // Required columns the official file already pre-fills (e.g. "Novo", "Clássico") are not missing.
 const hasFileDefault = (v?: string | null) => !!v && v !== "Selecionar" && !v.startsWith("Insira ou selecione");
 
@@ -33,7 +42,9 @@ function Wizard({ id }: { id: string }) {
   const { data: template } = useApi<Template>(batch?.template_id ? `/orgs/${org!.id}/templates/${batch.template_id}` : null);
   const { data: mapping } = useApi<Mapping>(batch?.template_id && batch.sheet_name ? `/orgs/${org!.id}/templates/${batch.template_id}/mapping?sheet=${encodeURIComponent(batch.sheet_name)}` : null);
   const [validation, setValidation] = useState<Validation | null>(null);
-  const [step, setStep] = useState(0);
+  const [phase, setPhaseState] = useState(0);
+  const [resumed, setResumed] = useState(false);
+  const show = (n: number) => PHASES[phase].steps.includes(n);
   const [msg, setMsg] = useState<{ tone: "ok" | "danger" | "info"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const writable = can.write(role) && !!batch && !["sent_external", "result_received", "done"].includes(batch.status);
@@ -54,6 +65,12 @@ function Wizard({ id }: { id: string }) {
   const categorySheets = template?.sheets.filter((s) => !s.is_help && s.state === "visible") ?? [];
   const requiredOpen = mapping ? mapping.columns.filter((c) => c.required && !mapping.rules[c.col]?.source && !mapping.rules[c.col]?.default?.trim() && !hasFileDefault(c.template_default)).length : 0;
   const v = batch?.validation ?? {};
+
+  if (batch && !resumed) { setResumed(true); setPhaseState(Math.min(Math.max((batch.last_phase ?? 1) - 1, 0), 4)); }
+  function setPhase(i: number) {
+    setPhaseState(i);
+    if (batch) api(base, { method: "PATCH", body: { last_phase: i + 1 } }).catch(() => undefined);
+  }
 
   if (error) return <Alert>{error}</Alert>;
   if (!batch) return <Skeleton className="h-96" />;
@@ -89,26 +106,31 @@ function Wizard({ id }: { id: string }) {
 
       <div className="grid gap-6 lg:grid-cols-[230px_1fr] items-start">
         <nav aria-label="Etapas" className="flex lg:flex-col gap-1 overflow-x-auto lg:sticky lg:top-8 -mx-4 px-4 lg:mx-0 lg:px-0 pb-2 lg:pb-0">
-          {steps.map((s, i) => (
-            <button key={s.key} onClick={() => setStep(i)} aria-current={step === i ? "step" : undefined}
-              className={cx("flex items-center gap-2.5 rounded-md px-3 h-9 text-sm whitespace-nowrap text-left transition-colors shrink-0",
-                step === i ? "bg-card text-fg" : "text-muted hover:text-fg hover:bg-card/60")}>
-              <span className={cx("grid place-items-center size-6 shrink-0 rounded-full text-[11px] font-semibold border",
-                s.done ? "bg-accent border-accent text-on-accent" : step === i ? "border-accent text-accent" : "border-line-strong text-faint")}>
-                {s.done ? <Check className="size-3.5" strokeWidth={3} /> : i + 1}
-              </span>
-              {s.title}
-              {!s.available && <Lock className="size-3 text-faint ml-auto" aria-label="indisponível" />}
-            </button>
-          ))}
+          {PHASES.map((ph, i) => {
+            const done = ph.steps.every((n) => steps[n].done);
+            return (
+              <button key={ph.title} onClick={() => setPhase(i)} aria-current={phase === i ? "step" : undefined}
+                className={cx("flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-left transition-colors shrink-0",
+                  phase === i ? "bg-card text-fg" : "text-muted hover:text-fg hover:bg-card/60")}>
+                <span className={cx("grid place-items-center size-6 shrink-0 rounded-full text-[11px] font-semibold border",
+                  done ? "bg-accent border-accent text-on-accent" : phase === i ? "border-accent text-accent" : "border-line-strong text-faint")}>
+                  {done ? <Check className="size-3.5" strokeWidth={3} /> : i + 1}
+                </span>
+                <span className="min-w-0"><span className="block whitespace-nowrap">{ph.title}</span>
+                  <span className="hidden lg:block text-[11px] text-faint whitespace-nowrap">{ph.hint}</span></span>
+              </button>
+            );
+          })}
         </nav>
 
         <Card className="p-6 min-w-0">
-          <h2 className="text-lg font-semibold mb-1">{step + 1}. {steps[step].title}</h2>
+          <h2 className="text-lg font-semibold mb-1">Fase {phase + 1}. {PHASES[phase].title}</h2>
           <div className="mt-4">
-            {step === 0 && <p className="text-sm text-muted">Mercado Livre — Anunciador em massa por planilha Excel (P1 p.1). Outros marketplaces terão fluxos próprios.</p>}
+            {show(0) && <h3 className="mt-6 first:mt-0 mb-2 text-xs font-semibold uppercase tracking-wider text-faint">{steps[0].title}{!steps[0].available && " · indisponível"}</h3>}
+            {show(0) && <p className="text-sm text-muted">Mercado Livre — Anunciador em massa por planilha Excel (P1 p.1). Outros marketplaces terão fluxos próprios.</p>}
 
-            {step === 1 && (
+            {show(1) && <h3 className="mt-6 first:mt-0 mb-2 text-xs font-semibold uppercase tracking-wider text-faint">{steps[1].title}{!steps[1].available && " · indisponível"}</h3>}
+            {show(1) && (
               <div className="flex flex-col gap-3 max-w-md">
                 <p className="text-sm text-muted">Escolha a conta de vendedor que vai baixar e enviar a planilha. O Mercado Livre só aceita planilhas baixadas da própria conta (P1 p.8).</p>
                 {accounts?.length === 0 ? <Alert tone="info">Cadastre uma conta em <Link className="underline" href="/marketplaces/">Marketplaces</Link>.</Alert> : (
@@ -120,7 +142,8 @@ function Wizard({ id }: { id: string }) {
               </div>
             )}
 
-            {step === 2 && (
+            {show(2) && <h3 className="mt-6 first:mt-0 mb-2 text-xs font-semibold uppercase tracking-wider text-faint">{steps[2].title}{!steps[2].available && " · indisponível"}</h3>}
+            {show(2) && (
               !batch.seller_account_id ? <Alert tone="info">Escolha a conta primeiro.</Alert> : (
                 <div className="flex flex-col gap-4">
                   {accountTemplates.length === 0 ? (
@@ -150,9 +173,11 @@ function Wizard({ id }: { id: string }) {
               )
             )}
 
-            {step === 3 && <ProductPicker base={base} batch={batch} writable={writable} onChange={(b) => { setBatch(b); setValidation(null); }} />}
+            {show(3) && <h3 className="mt-6 first:mt-0 mb-2 text-xs font-semibold uppercase tracking-wider text-faint">{steps[3].title}{!steps[3].available && " · indisponível"}</h3>}
+            {show(3) && <ProductPicker base={base} batch={batch} writable={writable} onChange={(b) => { setBatch(b); setValidation(null); }} />}
 
-            {step === 4 && (
+            {show(4) && <h3 className="mt-6 first:mt-0 mb-2 text-xs font-semibold uppercase tracking-wider text-faint">{steps[4].title}{!steps[4].available && " · indisponível"}</h3>}
+            {show(4) && (
               !batch.sheet_name || !batch.template_id ? <Alert tone="info">Escolha template e aba primeiro.</Alert> : !mapping ? <Skeleton className="h-24" /> : (
                 <div className="flex flex-col gap-3 text-sm">
                   <p className="text-muted">Relacione os campos do catálogo às colunas da aba <strong className="text-fg">{batch.sheet_name}</strong>. O mapeamento fica salvo no template e é reutilizado por outros lotes.</p>
@@ -166,7 +191,8 @@ function Wizard({ id }: { id: string }) {
               )
             )}
 
-            {step === 5 && (
+            {show(5) && <h3 className="mt-6 first:mt-0 mb-2 text-xs font-semibold uppercase tracking-wider text-faint">{steps[5].title}{!steps[5].available && " · indisponível"}</h3>}
+            {show(5) && (
               <div className="flex flex-col gap-4">
                 <p className="text-sm text-muted">A validação do MLA indica a origem de cada regra: interna, documentação oficial, template ou hipótese. Ela não substitui a validação do Mercado Livre no envio (P1 p.7) nem a coluna “Resumo de erros” do arquivo (P2 p.4–5).</p>
                 <div><Button variant="primary" busy={busy} disabled={!can.write(role) || batch.items === 0} onClick={validate}>Validar lote</Button></div>
@@ -181,7 +207,8 @@ function Wizard({ id }: { id: string }) {
               </div>
             )}
 
-            {step === 6 && (
+            {show(6) && <h3 className="mt-6 first:mt-0 mb-2 text-xs font-semibold uppercase tracking-wider text-faint">{steps[6].title}{!steps[6].available && " · indisponível"}</h3>}
+            {show(6) && (
               !validation ? <Alert tone="info">Rode a validação na etapa anterior.</Alert> : (
                 <div className="flex flex-col gap-3">
                   <p className="text-sm text-muted">Corrija no catálogo (vale para todos os canais) ou crie uma regra no <Link className="underline" href={`/assistente/?lote=${batch.id}`}>Assistente de Correção</Link> (só deste lote ou permanente). Depois valide de novo.</p>
@@ -200,11 +227,14 @@ function Wizard({ id }: { id: string }) {
               )
             )}
 
-            {step === 7 && <Review base={base} enabled={!!mapping?.header_row_confirmed} />}
+            {show(7) && <h3 className="mt-6 first:mt-0 mb-2 text-xs font-semibold uppercase tracking-wider text-faint">{steps[7].title}{!steps[7].available && " · indisponível"}</h3>}
+            {show(7) && <Review base={base} enabled={!!mapping?.header_row_confirmed} />}
 
-            {step === 8 && <ExportStep base={base} batch={batch} onBatch={setBatch} canWrite={can.write(role)} />}
+            {show(8) && <h3 className="mt-6 first:mt-0 mb-2 text-xs font-semibold uppercase tracking-wider text-faint">{steps[8].title}{!steps[8].available && " · indisponível"}</h3>}
+            {show(8) && <ExportStep base={base} batch={batch} onBatch={setBatch} canWrite={can.write(role)} />}
 
-            {step === 9 && (
+            {show(9) && <h3 className="mt-6 first:mt-0 mb-2 text-xs font-semibold uppercase tracking-wider text-faint">{steps[9].title}{!steps[9].available && " · indisponível"}</h3>}
+            {show(9) && (
               <div className="flex flex-col gap-3 text-sm">
                 <ol className="list-decimal pl-5 flex flex-col gap-1.5 text-muted">
                   <li>No Mercado Livre: lista de anúncios → “Anunciar” → “Em massa” (P1 p.1).</li>
@@ -217,7 +247,8 @@ function Wizard({ id }: { id: string }) {
               </div>
             )}
 
-            {step === 10 && (
+            {show(10) && <h3 className="mt-6 first:mt-0 mb-2 text-xs font-semibold uppercase tracking-wider text-faint">{steps[10].title}{!steps[10].available && " · indisponível"}</h3>}
+            {show(10) && (
               <div className="flex flex-col gap-3 text-sm">
                 <p className="text-muted">O Mercado Livre avisa por e-mail quando termina. Se houver erros, ele oferece um novo arquivo só com os anúncios não criados e a coluna “Resumo de erros” (P1 p.8).</p>
                 <Alert tone="info">A importação automática do arquivo de erros depende de uma planilha de retorno real para conhecer o formato. Enquanto isso, cole o conteúdo da coluna “Resumo de erros” no <Link className="underline" href={`/assistente/?lote=${batch.id}`}>Assistente de Correção</Link>.</Alert>
@@ -225,7 +256,8 @@ function Wizard({ id }: { id: string }) {
               </div>
             )}
 
-            {step === 11 && (
+            {show(11) && <h3 className="mt-6 first:mt-0 mb-2 text-xs font-semibold uppercase tracking-wider text-faint">{steps[11].title}{!steps[11].available && " · indisponível"}</h3>}
+            {show(11) && (
               <div className="flex flex-col gap-3 text-sm">
                 <p className="text-muted">Corrija os itens recusados com o Assistente de Correção (regra só para este lote ou regra permanente), valide de novo e gere uma nova planilha. Para um novo envio, crie um lote com os produtos recusados: lotes enviados ficam travados para preservar o histórico.</p>
                 <div><Link href={`/assistente/?lote=${batch.id}`}><Button variant="primary">Abrir Assistente de Correção</Button></Link></div>
@@ -234,8 +266,8 @@ function Wizard({ id }: { id: string }) {
           </div>
 
           <div className="mt-8 flex justify-between border-t border-line pt-4">
-            <Button variant="ghost" disabled={step === 0} onClick={() => setStep(step - 1)}>Voltar</Button>
-            <Button disabled={step === steps.length - 1} onClick={() => setStep(step + 1)}>Próxima etapa <ChevronRight className="size-4" /></Button>
+            <Button variant="ghost" disabled={phase === 0} onClick={() => setPhase(phase - 1)}>Voltar</Button>
+            <Button disabled={phase === PHASES.length - 1} onClick={() => setPhase(phase + 1)}>Próxima fase <ChevronRight className="size-4" /></Button>
           </div>
         </Card>
       </div>
@@ -294,7 +326,9 @@ function ProductPicker({ base, batch, writable, onChange }: { base: string; batc
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
   useEffect(() => { const t = setTimeout(() => setQuery(q), 300); return () => clearTimeout(t); }, [q]);
-  const { data } = useApi<ProductPage>(`/orgs/${org!.id}/products?q=${encodeURIComponent(query)}&limit=50&sort=name`);
+  const [category, setCategory] = useState("");
+  const { data: categories } = useApi<{ id: string; path: string }[]>(`/orgs/${org!.id}/categories`);
+  const { data } = useApi<ProductPage>(`/orgs/${org!.id}/products?q=${encodeURIComponent(query)}&limit=50&sort=name${category ? `&category_id=${category}` : ""}`);
   const { data: ids, setData: setIds } = useApi<string[]>(`${base}/items`);
   const selected = useMemo(() => new Set(ids ?? []), [ids]);
 
@@ -309,7 +343,11 @@ function ProductPicker({ base, batch, writable, onChange }: { base: string; batc
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-faint" aria-hidden />
           <Input aria-label="Buscar produtos" placeholder="Buscar por nome, SKU ou marca" className="pl-9" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-        {writable && <Button onClick={() => change({ mode: "add", all_matching: { q: query } })}>Adicionar todos {query ? "do filtro" : "do catálogo"}{data ? ` (${data.total})` : ""}</Button>}
+        <Select aria-label="Filtrar por categoria" value={category} onChange={(e) => setCategory(e.target.value)}>
+          <option value="">Todas as categorias</option>
+          {categories?.map((c) => <option key={c.id} value={c.id}>{c.path}</option>)}
+        </Select>
+        {writable && <Button onClick={() => change({ mode: "add", all_matching: { q: query, ...(category ? { category_id: category } : {}) } })}>Adicionar todos {query || category ? "do filtro" : "do catálogo"}{data ? ` (${data.total})` : ""}</Button>}
         {writable && selected.size > 0 && <Button variant="ghost" onClick={() => change({ mode: "replace", product_ids: [] })}>Limpar seleção</Button>}
       </div>
       <p className="text-sm text-muted"><strong className="text-fg">{batch.items}</strong> produto(s) no lote.</p>

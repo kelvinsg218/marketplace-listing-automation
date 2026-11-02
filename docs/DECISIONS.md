@@ -182,3 +182,8 @@ organization (separate from Mercado Livre categories, whose IDs are user-provide
 Scoring: phrase in name 3, in description/attributes 1.5; word 1 / 0.5; exclusions disqualify; whole-word match with
 simple plural. High confidence needs score >= 3, a 2-point lead and a phrase in the name or 2+ evidences; a single
 isolated word never classifies. Manual confirmations are never overwritten by automatic runs.
+
+**D-033 (2026-11-02) Batch management keeps history.** Batches can be renamed, duplicated (history
+`duplicated_from`) and archived; only draft/needs_fix/ready batches without exports can be deleted, all others must
+be archived. The wizard shows 5 phases that group the former 12 steps without removing any validation;
+`last_phase` lets the user resume where they stopped.

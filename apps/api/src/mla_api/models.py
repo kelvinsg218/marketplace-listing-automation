@@ -273,6 +273,8 @@ class ListingBatch(Base):
     status: Mapped[str] = mapped_column(String(20), default=BatchStatus.DRAFT, nullable=False)
     validation: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)  # last validation summary
     history: Mapped[list] = mapped_column(JSON, default=list, nullable=False)     # [{at, by, event, ...}]
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_phase: Mapped[int] = mapped_column(Integer, default=1, nullable=False)  # wizard phase 1-5 to resume
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow,

@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from mla_api import audit
 from mla_api.deps import OrgContext, require
 from mla_api.domain.catalog import catalog_pendings, is_complete
-from mla_api.models import ListingBatch, Product, ProductStatus
+from mla_api.models import Category, ListingBatch, Product, ProductClassification, ProductStatus
 from mla_api.routers.orgs import recent_audit
 from mla_api.schemas import DashboardOut, PendingOut, ProductIn, ProductOut, ProductPage, ProductPatch
 
@@ -37,10 +37,24 @@ def _get(ctx: OrgContext, product_id: uuid.UUID) -> Product:
     return p
 
 
+def category_condition(ctx: OrgContext, category_id: uuid.UUID):
+    """Products whose CONFIRMED classification is the category or one of its sub-categories."""
+    ids = {category_id}
+    frontier = {category_id}
+    while frontier:  # categories are a shallow tree; this also stops on accidental cycles
+        children = set(ctx.db.scalars(select(Category.id).where(Category.organization_id == ctx.org_id,
+                                                                Category.parent_id.in_(frontier)))) - ids
+        ids |= children
+        frontier = children
+    return Product.id.in_(select(ProductClassification.product_id).where(
+        ProductClassification.organization_id == ctx.org_id, ProductClassification.status == "confirmed",
+        ProductClassification.category_id.in_(ids)))
+
+
 @router.get("/products", response_model=ProductPage)
 def list_products(ctx: OrgContext = Depends(require("catalog.read")),
                   q: str = Query("", max_length=100), status_: ProductStatus | None = Query(None, alias="status"),
-                  sort: Literal["updated", "name", "sku"] = "updated",
+                  sort: Literal["updated", "name", "sku"] = "updated", category_id: uuid.UUID | None = None,
                   limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)) -> ProductPage:
     cond = [Product.organization_id == ctx.org_id]
     if q.strip():
@@ -49,6 +63,8 @@ def list_products(ctx: OrgContext = Depends(require("catalog.read")),
                         Product.gtin.like(like)))
     if status_:
         cond.append(Product.status == status_)
+    if category_id:
+        cond.append(category_condition(ctx, category_id))
     total = ctx.db.scalar(select(func.count()).select_from(Product).where(*cond))
     rows = ctx.db.scalars(select(Product).where(*cond).order_by(_SORTS[sort], Product.id)
                           .limit(limit).offset(offset)).all()
