@@ -5,7 +5,7 @@ import uuid
 from datetime import date, datetime
 from enum import StrEnum
 
-from sqlalchemy import JSON, BigInteger, Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import JSON, BigInteger, Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Index, Integer, String
 from sqlalchemy import Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -380,9 +380,43 @@ class ImportProfile(Base):
     created_at: Mapped[datetime] = _created()
 
 
-# Tables protected by PostgreSQL row-level security (migrations 0001-0004). New organization-owned tables must be
+class Category(Base):
+    """Internal category (organization tree), independent of marketplace categories. Keywords drive the
+    deterministic classifier (domain/classifier.py). The ML category is user-provided and flagged unconfirmed."""
+    __tablename__ = "categories"
+    __table_args__ = (UniqueConstraint("organization_id", "parent_id", "name", name="uq_category_name"),)
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = _org_fk()
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    keywords: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)  # {phrases, words, exclude}
+    ml_category_id: Mapped[str] = mapped_column(String(40), default="", nullable=False)
+    ml_category_confirmed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = _created()
+
+
+class ProductClassification(Base):
+    """Classification of one product: suggestion (with evidence) or a manual confirmation that is never
+    overwritten automatically."""
+    __tablename__ = "product_classifications"
+    __table_args__ = (UniqueConstraint("product_id", name="uq_classification_product"),
+                      CheckConstraint("status in ('suggested','unclassified','confirmed')", name="ck_class_status"))
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = _org_fk()
+    product_id: Mapped[uuid.UUID] = _product_fk(index=False)
+    category_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("categories.id", ondelete="SET NULL"))
+    status: Mapped[str] = mapped_column(String(14), nullable=False)
+    confidence: Mapped[str] = mapped_column(String(8), default="baixa", nullable=False)
+    score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    evidence: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow,
+                                                 nullable=False)
+
+
+# Tables protected by PostgreSQL row-level security (migrations 0001-0005). New organization-owned tables must be
 # added here AND get a policy in their migration; tests/test_isolation.py checks the list against the metadata.
 TENANT_TABLES = ("products", "audit_events", "product_variants", "product_images", "product_channel_data",
                  "seller_accounts", "marketplace_templates", "template_mappings", "listing_batches",
                  "listing_batch_items", "listing_rules", "listing_rule_versions", "batch_exports", "import_jobs",
-                 "import_profiles")
+                 "import_profiles", "categories", "product_classifications")

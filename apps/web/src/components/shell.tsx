@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  Boxes, ChevronsUpDown, FileSpreadsheet, History, Images, LayoutDashboard, LifeBuoy, Workflow, Layers, LogOut, Menu, Network, PackageOpen,
+  Boxes, ChevronsUpDown, FileSpreadsheet, FolderTree, History, Images, LayoutDashboard, LifeBuoy, Workflow, Layers, LogOut, Menu, Network, PackageOpen,
   Settings, Store, Upload, Users, Wrench, X,
 } from "lucide-react";
 import { useRequireSession, useSession } from "@/lib/session";
@@ -17,6 +17,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
   {
     section: "Catálogo", items: [
       { href: "/catalogo/", label: "Produtos", icon: Boxes },
+      { href: "/categorias/", label: "Categorias", icon: FolderTree },
       { href: "/fotos/", label: "Central de Fotos", icon: Images },
       { href: "/importacoes/", label: "Importações", icon: Upload },
       { href: "/compatibilidades/", label: "Compatibilidades", icon: Wrench, soon: true },

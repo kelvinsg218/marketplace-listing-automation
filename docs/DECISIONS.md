@@ -177,3 +177,8 @@ URLs). Formats enabled in the UI: XLSX, CSV, JSON, XML (PDF/ZIP parsers exist bu
 this flow). Processing uses FastAPI BackgroundTasks in chunks of 200 with cancellation; a durable PostgreSQL job
 queue + separate worker is the next step for multi-instance deployments.
 
+**D-032 (2026-11-02) Product classification is deterministic and explainable.** Internal category tree per
+organization (separate from Mercado Livre categories, whose IDs are user-provided and flagged unconfirmed).
+Scoring: phrase in name 3, in description/attributes 1.5; word 1 / 0.5; exclusions disqualify; whole-word match with
+simple plural. High confidence needs score >= 3, a 2-point lead and a phrase in the name or 2+ evidences; a single
+isolated word never classifies. Manual confirmations are never overwritten by automatic runs.
