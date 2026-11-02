@@ -172,6 +172,15 @@ class ProductImage(Base):
     sha256: Mapped[str] = mapped_column(String(64), default="", nullable=False)
     original_name: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     official_url: Mapped[str] = mapped_column(String(500), default="", nullable=False)
+    # Central de Imagens: where the image came from, its review state and its version lineage.
+    source: Mapped[str] = mapped_column(String(12), default="upload", nullable=False)  # upload|url_externa|gestor|ia
+    external_url: Mapped[str] = mapped_column(String(500), default="", nullable=False)
+    status: Mapped[str] = mapped_column(String(10), default="approved", nullable=False)  # pending|approved|rejected
+    parent_image_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("product_images.id", ondelete="SET NULL"))
+    prompt: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    provider: Mapped[str] = mapped_column(String(40), default="", nullable=False)
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _created()
 
 

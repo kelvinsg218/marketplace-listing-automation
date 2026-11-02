@@ -25,8 +25,10 @@ def load_products(db: Session, org_id: uuid.UUID, product_ids: list[uuid.UUID],
                                                          ProductVariant.product_id.in_(ids))
                             .order_by(ProductVariant.position, ProductVariant.created_at)):
             variants[v.product_id].append(VariantData(v.sku, dict(v.attributes), v.gtin, v.price_cents, v.stock))
+        # Only approved images reach a sheet (AI versions stay pending until a person approves them).
         for i in db.scalars(select(ProductImage).where(ProductImage.organization_id == org_id,
-                                                       ProductImage.product_id.in_(ids))
+                                                       ProductImage.product_id.in_(ids),
+                                                       ProductImage.status == "approved")
                             .order_by(ProductImage.position, ProductImage.created_at)):
             if i.official_url:
                 urls[i.product_id].append(i.official_url)

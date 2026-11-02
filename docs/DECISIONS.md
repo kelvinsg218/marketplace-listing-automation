@@ -187,3 +187,12 @@ isolated word never classifies. Manual confirmations are never overwritten by au
 `duplicated_from`) and archived; only draft/needs_fix/ready batches without exports can be deleted, all others must
 be archived. The wizard shows 5 phases that group the former 12 steps without removing any validation;
 `last_phase` lets the user resume where they stopped.
+
+**D-034 (2026-11-02) Images are versioned and approved; AI editing is a pluggable provider, none configured.** Every
+image records its source (upload, url_externa, gestor, ia) and status (pending, approved, rejected). Only approved
+images reach sheets. An AI edit creates a new pending version (parent, prompt, provider) and never changes the
+original; approval records who and when. Providers implement `ImageEditProvider` and are chosen by
+`MLA_IMAGE_AI_PROVIDER`; when it is empty the studio says no provider is configured and nothing is simulated. An
+external provider requires explicit consent per request (client images leave the MLA). Import by URL goes through
+`safe_fetch`: https on port 443 only, no redirects, no private/loopback/link-local/CGNAT addresses, 10 MB, content
+sniffed.

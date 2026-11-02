@@ -160,6 +160,13 @@ class ImageOut(BaseModel):
     original_name: str
     official_url: str
     url_problem: str | None
+    source: str = "upload"          # upload | url_externa | gestor | ia
+    external_url: str = ""
+    status: str = "approved"        # pending | approved | rejected
+    parent_image_id: uuid.UUID | None = None
+    prompt: str = ""
+    provider: str = ""
+    reviewed_at: UtcDatetime | None = None
     created_at: UtcDatetime
 
 
@@ -168,7 +175,9 @@ def _image_out(i: ProductImage) -> ImageOut:
     return ImageOut(id=i.id, position=i.position, variant_id=i.variant_id, has_file=bool(i.storage_key),
                     content_type=i.content_type, size_bytes=i.size_bytes, original_name=i.original_name,
                     official_url=i.official_url, url_problem=problem.message if problem else None,
-                    created_at=i.created_at)
+                    source=i.source or "upload", external_url=i.external_url or "", status=i.status or "approved",
+                    parent_image_id=i.parent_image_id, prompt=i.prompt or "", provider=i.provider or "",
+                    reviewed_at=i.reviewed_at, created_at=i.created_at)
 
 
 def _images(ctx: OrgContext, product_id: uuid.UUID) -> list[ProductImage]:
@@ -238,7 +247,7 @@ def add_official_urls(product_id: uuid.UUID, body: list[ImageUrlIn],
     position = len(_images(ctx, p.id))
     for n, url in enumerate(urls):
         ctx.db.add(ProductImage(organization_id=ctx.org_id, product_id=p.id, position=position + n,
-                                official_url=url))
+                                official_url=url, source="gestor", status="approved"))
     audit.record(ctx.db, "image.urls_added", user_id=ctx.user.id, org_id=ctx.org_id, target_type="product",
                  target_id=p.id, sku=p.sku, count=len(urls))
     ctx.db.commit()

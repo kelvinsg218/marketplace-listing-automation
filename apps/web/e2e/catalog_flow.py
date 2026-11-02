@@ -78,7 +78,7 @@ with sync_playwright() as p:
     expect(page.get_by_text("sugestão(ões) aceita(s)", exact=False)).to_be_visible()
 
     page.goto(BASE + "/fotos/")
-    expect(page.get_by_text("Sem URL oficial").first).to_be_visible()
+    expect(page.get_by_text("sem imagem aprovada").first).to_be_visible()
 
     sizes = {}
     for channel in ("msedge", "chrome"):

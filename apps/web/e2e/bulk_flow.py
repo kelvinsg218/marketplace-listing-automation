@@ -93,8 +93,8 @@ with sync_playwright() as p:
     expect(page.get_by_text("2 com URL oficial")).to_be_visible()
     shot(page, "23-product-variants-photos")
 
-    page.get_by_role("link", name="Central de Fotos", exact=True).click()
-    expect(page.get_by_text("Sem URL oficial")).to_be_visible()  # BIS-2 has no photo
+    page.get_by_role("link", name="Central de Imagens", exact=True).click()
+    expect(page.get_by_text("sem imagem aprovada").first).to_be_visible()  # BIS-2 has no photo
     shot(page, "24-photos")
 
     # Batch wizard

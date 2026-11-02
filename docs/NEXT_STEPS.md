@@ -9,4 +9,5 @@ Ações humanas:
    (só cria o papel `mla` e os bancos `mla`/`mla_test`).
 
 Desenvolvimento: importador do arquivo de retorno; adaptador da API oficial (OAuth web + `/items` com confirmação);
-Central de Importações (etapa C) com fila e worker; IA externa opcional com consentimento para interpretar pedidos.
+Central de Importações (etapa C) com fila e worker; IA externa opcional com consentimento para interpretar pedidos; escolher um provedor real para o Estúdio de IA
+(D-034) e definir limites de custo.

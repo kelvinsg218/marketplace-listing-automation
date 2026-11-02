@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     login_max_failures: int = 5
     login_window_seconds: int = 15 * 60
     cors_origins: list[str] = []
+    image_ai_provider: str = ""  # empty = AI image editing not configured (nothing is simulated)
 
     @model_validator(mode="after")
     def _production_guards(self) -> "Settings":

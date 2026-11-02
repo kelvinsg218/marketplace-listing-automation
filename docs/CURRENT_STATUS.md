@@ -1,8 +1,8 @@
 # Estado atual — MLA Web 2.0
 
 O aplicativo desktop foi descontinuado e removido (D-030; inventário em [MLA_LEGACY_MIGRATION.md](MLA_LEGACY_MIGRATION.md)).
-Versão 2.0.0-alpha.0. API: 158 testes aprovados + 1 pulado (RLS). Web: typecheck e build ok. E2E no Edge: básico,
-anúncios em massa e fluxo oficial ok. Edge × Chrome: layout idêntico em 1366×768, 1440×900 e 1920×1080.
+Versão 2.0.0-alpha.0. API: 176 testes aprovados + 1 pulado (RLS). Web: typecheck e build ok. E2E no Edge: básico,
+catálogo, imagens, anúncios em massa e fluxo oficial ok. Edge × Chrome: layout idêntico em 1366×768, 1440×900 e 1920×1080.
 
 | Área | Situação |
 |---|---|
@@ -13,6 +13,7 @@ anúncios em massa e fluxo oficial ok. Edge × Chrome: layout idêntico em 1366�
 | Central de Importações | XLSX/CSV/JSON/XML com simulação, processamento em segundo plano e relatório |
 | Classificação | Categorias internas + classificação explicável + fila de revisão |
 | Gestão de lotes | Continuar, renomear, duplicar, excluir rascunho, arquivar; assistente em 5 fases |
+| Central de Imagens | Versões, aprovação, origem, importação por URL; **nenhum provedor de IA configurado** |
 | Compatibilidades, fila/worker | Não iniciados |
 | Firefox | Não testado (não instalado) |
 
