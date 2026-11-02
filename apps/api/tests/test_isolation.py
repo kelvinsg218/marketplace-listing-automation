@@ -87,8 +87,11 @@ def test_rls_hides_rows_even_without_application_filter(pg_url, tmp_path):
 
     engine = make_engine(pg_url)
     with engine.connect() as c:
-        if c.execute(text("select rolsuper from pg_roles where rolname = current_user")).scalar():
-            pytest.skip("Conectado como superusuário: o PostgreSQL ignora RLS para superusuários.")
+        # The test drops and recreates the schema: never run it against a database that is not a test database.
+        if not c.execute(text("select current_database()")).scalar().endswith("_test"):
+            pytest.fail("MLA_TEST_DATABASE_URL precisa apontar para um banco cujo nome termina em _test.")
+        if c.execute(text("select rolsuper or rolbypassrls from pg_roles where rolname = current_user")).scalar():
+            pytest.skip("Conectado como superusuário ou BYPASSRLS: o PostgreSQL ignora RLS nesses papéis.")
     with engine.begin() as c:
         c.execute(text("drop schema public cascade; create schema public"))
     cfg = Config(str(__import__("pathlib").Path(__file__).parents[1] / "alembic.ini"))
@@ -104,9 +107,17 @@ def test_rls_hides_rows_even_without_application_filter(pg_url, tmp_path):
     a.add_product(org_a, "A-1")
     b.add_product(org_b, "B-1")
 
+    with engine.connect() as c:  # every tenant table: RLS enabled AND forced (the owner is not exempt), with a policy
+        rows = c.execute(text("select c.relname, c.relrowsecurity, c.relforcerowsecurity, "
+                              "exists(select 1 from pg_policies p where p.tablename = c.relname) "
+                              "from pg_class c where c.relname = any(:t)"), {"t": list(TENANT_TABLES)}).all()
+        assert {r[0] for r in rows} == set(TENANT_TABLES)
+        assert [r[0] for r in rows if not (r[1] and r[2] and r[3])] == []
     sm = make_sessionmaker(engine)
     with sm() as db:  # no tenant: nothing visible, even with a query that forgets organization_id
         assert db.scalars(select(Product)).all() == []
+        assert {t: db.execute(text(f"select count(*) from {t}")).scalar() for t in TENANT_TABLES} == \
+            {t: 0 for t in TENANT_TABLES}
     with sm() as db:
         set_tenant(db, db.scalar(select(Organization.id).where(Organization.name == "A")))
         assert [p.sku for p in db.scalars(select(Product))] == ["A-1"]

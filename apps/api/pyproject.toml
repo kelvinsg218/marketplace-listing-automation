@@ -19,6 +19,7 @@ dependencies = [
     "python-multipart==0.0.20",
     "openpyxl==3.1.5",   # template inspection + XLSX import (macros never loaded)
     "pypdf==6.1.3",      # PDF import (text, no OCR)
+    "cryptography==46.0.7",  # AES-GCM for marketplace OAuth tokens at rest
 ]
 
 [project.optional-dependencies]

@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr = SecretStr("")  # server-side only; never returned by any endpoint
     openai_image_model: str = "gpt-image-2"
     openai_image_quality: Literal["low", "medium", "high"] = "medium"
+    # Mercado Livre OAuth (official authorization-code flow + PKCE). Empty client id = integration not configured.
+    ml_client_id: str = ""
+    ml_client_secret: SecretStr = SecretStr("")
+    ml_redirect_uri: str = ""  # must be identical to the one registered in the Mercado Livre app
+    token_encryption_key: SecretStr = SecretStr("")  # base64 of 32 random bytes (AES-256-GCM for tokens at rest)
 
     @model_validator(mode="after")
     def _production_guards(self) -> "Settings":

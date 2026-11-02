@@ -213,6 +213,55 @@ class SellerAccount(Base):
     created_at: Mapped[datetime] = _created()
 
 
+class ConnectionStatus(StrEnum):
+    CONNECTED = "connected"
+    NEEDS_REAUTH = "needs_reauth"   # authorization revoked/expired (invalid_grant): connect again
+    ERROR = "error"                 # last check failed for a transient reason (network, 429, 5xx); tokens kept
+    DISCONNECTED = "disconnected"   # tokens erased in the MLA
+
+
+class MarketplaceConnection(Base):
+    """Official OAuth connection of one seller account. Tokens are AES-GCM encrypted (services/token_crypto.py)
+    and never leave the server. A connection gives API access only; it never publishes by itself (D-036)."""
+    __tablename__ = "marketplace_connections"
+    __table_args__ = (UniqueConstraint("seller_account_id", name="uq_connection_account"),
+                      UniqueConstraint("organization_id", "marketplace", "remote_user_id", name="uq_connection_remote"))
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = _org_fk()
+    seller_account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("seller_accounts.id", ondelete="CASCADE"),
+                                                         nullable=False)
+    marketplace: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default=ConnectionStatus.DISCONNECTED, nullable=False)
+    remote_user_id: Mapped[str | None] = mapped_column(String(40))
+    nickname: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    scope: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    access_token_enc: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    refresh_token_enc: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    connected_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    refreshed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str] = mapped_column(String(300), default="", nullable=False)
+    created_at: Mapped[datetime] = _created()
+
+
+class OAuthState(Base):
+    """One pending authorization (10 minutes, single use). Only the SHA-256 of the state is stored; the PKCE verifier
+    is encrypted. Bound to the user who started it."""
+    __tablename__ = "oauth_states"
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = _org_fk()
+    seller_account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("seller_accounts.id", ondelete="CASCADE"),
+                                                         nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    state_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    verifier_enc: Mapped[str] = mapped_column(Text, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _created()
+
+
 class TemplateStatus(StrEnum):
     INSPECTED = "inspected"
     INVALID = "invalid"
@@ -444,4 +493,5 @@ class AiSpend(Base):
 TENANT_TABLES = ("products", "audit_events", "product_variants", "product_images", "product_channel_data",
                  "seller_accounts", "marketplace_templates", "template_mappings", "listing_batches",
                  "listing_batch_items", "listing_rules", "listing_rule_versions", "batch_exports", "import_jobs",
-                 "import_profiles", "categories", "product_classifications")
+                 "import_profiles", "categories", "product_classifications", "marketplace_connections",
+                 "oauth_states")

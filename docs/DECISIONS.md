@@ -206,3 +206,12 @@ request. One image per request, always from the original photo; a fixed instruct
 installation-wide counter (`ai_spend`, not organization-owned because the key belongs to the operator) reserves
 US$ 0.25 per request with a conditional UPDATE and settles with the real cost; unknown costs keep the reservation.
 Default limit US$ 5; requests are refused once it would be passed. Tests never read `.env` (no accidental paid call).
+
+**D-036 (2026-11-02) Mercado Livre official OAuth is separate from the XLSX flow.** Authorization code + PKCE (S256);
+`state` = organization + random, stored only as SHA-256, single use, 10 minutes, bound to the user who started it.
+The callback identifies the account with `/users/me` and refuses an account different from the registered seller ID
+or already linked in the organization. Tokens are AES-256-GCM encrypted (`cryptography`) with the row as associated
+data; never logged, audited or returned. Refresh tokens are single use: renewal locks the row (FOR UPDATE) and keeps
+the newest one; `invalid_grant` = revoked/expired -> tokens erased, status `needs_reauth`. Disconnect erases tokens
+in the MLA; revoking on the Mercado Livre side is done by the seller there. OAuth does NOT upload the bulk XLSX and
+nothing publishes listings; API publishing (`/items`) will be a separate, explicitly confirmed step.
