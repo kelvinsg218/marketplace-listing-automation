@@ -16,9 +16,11 @@ PASSWORD = "senha-forte-123"
 
 def make_settings(tmp_path, **overrides) -> Settings:
     values = dict(environment="test", database_url=f"sqlite:///{(tmp_path / 'test.db').as_posix()}",
-                  storage_dir=tmp_path / "storage", cookie_secure=False, public_url="http://web.test")
+                  storage_dir=tmp_path / "storage", cookie_secure=False, public_url="http://web.test",
+                  # Tests never reach a paid provider, even when the developer's .env/environment has a real key.
+                  image_ai_provider="", image_ai_enabled=False, openai_api_key="")
     values.update(overrides)
-    return Settings(**values)
+    return Settings(_env_file=None, **values)
 
 
 @pytest.fixture

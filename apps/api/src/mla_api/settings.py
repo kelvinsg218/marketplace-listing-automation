@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 API_ROOT = Path(__file__).resolve().parents[2]
@@ -29,7 +29,13 @@ class Settings(BaseSettings):
     login_max_failures: int = 5
     login_window_seconds: int = 15 * 60
     cors_origins: list[str] = []
-    image_ai_provider: str = ""  # empty = AI image editing not configured (nothing is simulated)
+    image_ai_provider: str = ""  # empty = AI image editing not configured (nothing is simulated); "openai"
+    image_ai_enabled: bool = False  # second switch: a configured key alone never enables paid calls
+    image_ai_budget_usd: float = 5.0  # installation-wide limit; new requests are refused once it is reached
+    image_ai_reserve_usd: float = 0.25  # held per request before the call (conservative upper estimate)
+    openai_api_key: SecretStr = SecretStr("")  # server-side only; never returned by any endpoint
+    openai_image_model: str = "gpt-image-2"
+    openai_image_quality: Literal["low", "medium", "high"] = "medium"
 
     @model_validator(mode="after")
     def _production_guards(self) -> "Settings":

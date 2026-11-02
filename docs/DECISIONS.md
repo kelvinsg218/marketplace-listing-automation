@@ -196,3 +196,13 @@ original; approval records who and when. Providers implement `ImageEditProvider`
 external provider requires explicit consent per request (client images leave the MLA). Import by URL goes through
 `safe_fetch`: https on port 443 only, no redirects, no private/loopback/link-local/CGNAT addresses, 10 MB, content
 sniffed.
+
+**D-035 (2026-11-02) First AI image provider = OpenAI Image API, off by default, under an internal budget.** Model
+`gpt-image-2` via `POST /v1/images/edits` (official docs checked 2026-11-02: quality low|medium|high, no
+`input_fidelity` for this model, cost from the response `usage`; prices USD per 1M tokens: text in 5, image in 8,
+image out 30). Two switches: key (`MLA_OPENAI_API_KEY`, server only) and `MLA_IMAGE_AI_ENABLED`; plus consent per
+request. One image per request, always from the original photo; a fixed instruction forbids changing the product
+(shape, colors, logos, text, parts). Results are pending previews until a person approves them. Budget: an
+installation-wide counter (`ai_spend`, not organization-owned because the key belongs to the operator) reserves
+US$ 0.25 per request with a conditional UPDATE and settles with the real cost; unknown costs keep the reservation.
+Default limit US$ 5; requests are refused once it would be passed. Tests never read `.env` (no accidental paid call).

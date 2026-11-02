@@ -181,6 +181,8 @@ class ProductImage(Base):
     provider: Mapped[str] = mapped_column(String(40), default="", nullable=False)
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cost_micro_usd: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)  # paid AI edit, 1e-6 USD
+    ai_usage: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)  # provider `usage` + model
     created_at: Mapped[datetime] = _created()
 
 
@@ -427,6 +429,18 @@ class ProductClassification(Base):
 
 # Tables protected by PostgreSQL row-level security (migrations 0001-0005). New organization-owned tables must be
 # added here AND get a policy in their migration; tests/test_isolation.py checks the list against the metadata.
+class AiSpend(Base):
+    """Installation-wide spend of a paid AI provider (the API key and the budget belong to the operator, not to an
+    organization). Requests reserve a conservative amount first; the real cost replaces it when the call ends."""
+    __tablename__ = "ai_spend"
+    provider: Mapped[str] = mapped_column(String(40), primary_key=True)
+    spent_micro_usd: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    reserved_micro_usd: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    calls: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow,
+                                                 nullable=False)
+
+
 TENANT_TABLES = ("products", "audit_events", "product_variants", "product_images", "product_channel_data",
                  "seller_accounts", "marketplace_templates", "template_mappings", "listing_batches",
                  "listing_batch_items", "listing_rules", "listing_rule_versions", "batch_exports", "import_jobs",

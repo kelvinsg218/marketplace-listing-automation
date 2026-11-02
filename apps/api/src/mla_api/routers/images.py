@@ -9,12 +9,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import case, func, or_, select
 
 from mla_api import audit
+from mla_api.services import ai_budget
 from mla_api.db import utcnow
 from mla_api.deps import OrgContext, require
 from mla_api.models import Product, ProductImage
 from mla_api.routers.media import ImageOut, _get_image, _image_out, _images, sniff_image
 from mla_api.routers.products import _get as get_product, category_condition
-from mla_api.services.image_ai import ImageEditError
+from mla_api.services.image_ai import PRESERVE_PRODUCT, ImageEditError
 from mla_api.services.safe_fetch import FetchRefused, fetch_image
 
 router = APIRouter(prefix="/api/orgs/{org_id}", tags=["images"])
@@ -117,12 +118,26 @@ def review(product_id: uuid.UUID, image_id: uuid.UUID, body: ReviewIn,
     return _image_out(img)
 
 
+def _budget(request: Request, ctx: OrgContext) -> dict | None:
+    st = request.app.state.settings
+    if (st.image_ai_provider or "").strip().lower() != "openai":
+        return None
+    return {**ai_budget.snapshot(ctx.db, "openai", st.image_ai_budget_usd), "reserve_usd": st.image_ai_reserve_usd}
+
+
 @router.get("/images/ai/status")
 def ai_status(request: Request, ctx: OrgContext = Depends(require("catalog.read"))) -> dict:
-    p = request.app.state.image_ai
+    """What the studio can do right now. Never returns the key (only whether one is configured)."""
+    p, st = request.app.state.image_ai, request.app.state.settings
+    budget = _budget(request, ctx)
+    blocked = bool(budget and budget["remaining_usd"] < st.image_ai_reserve_usd)
     return {"configured": p is not None, "provider": getattr(p, "name", None), "external": getattr(p, "external", None),
-            "message": None if p else "A edição por IA depende da configuração de um provedor (MLA_IMAGE_AI_PROVIDER). "
-                                      "Nenhum provedor está configurado; nada é simulado."}
+            "paid": getattr(p, "paid", False), "model": getattr(p, "model", None),
+            "quality": getattr(p, "quality", None), "budget": budget, "blocked": blocked,
+            "preserve_product": PRESERVE_PRODUCT.rsplit(" User request:", 1)[0],
+            "message": request.app.state.image_ai_message if p is None else
+            (f"Limite interno de US$ {st.image_ai_budget_usd:.2f} atingido; novas edições estão bloqueadas."
+             if blocked else None)}
 
 
 class EditIn(BaseModel):
@@ -130,31 +145,63 @@ class EditIn(BaseModel):
     consent: bool = False
 
 
+def _root_original(ctx: OrgContext, product_id: uuid.UUID, img: ProductImage) -> ProductImage:
+    """AI versions are always made from the original photo, never from another AI result."""
+    seen = set()
+    while img.source == "ia" and img.parent_image_id and img.parent_image_id not in seen:
+        seen.add(img.id)
+        img = _get_image(ctx, product_id, img.parent_image_id)
+    return img
+
+
 @router.post("/products/{product_id}/images/{image_id}/ai-edit", response_model=ImageOut, status_code=201)
 def ai_edit(product_id: uuid.UUID, image_id: uuid.UUID, body: EditIn, request: Request,
             ctx: OrgContext = Depends(require("catalog.write"))) -> ImageOut:
-    """Creates a NEW pending version from the provider's result; the original is never changed."""
-    provider = request.app.state.image_ai
+    """One image per request (no bulk editing). The result is a NEW pending version (a preview until a person
+    approves it); the original is never changed. Paid providers run under the installation budget (D-035)."""
+    provider, st = request.app.state.image_ai, request.app.state.settings
     if provider is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Edição por IA não configurada nesta instalação.")
+        raise HTTPException(status.HTTP_409_CONFLICT, request.app.state.image_ai_message
+                            or "Edição por IA não configurada nesta instalação.")
     if provider.external and not body.consent:
         raise HTTPException(status.HTTP_409_CONFLICT, "Confirme que autoriza enviar esta imagem ao provedor externo.")
+    if len(body.prompt) > provider.max_prompt:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Instrução acima de {provider.max_prompt} caracteres.")
     p = get_product(ctx, product_id)
-    src = _get_image(ctx, product_id, image_id)
+    src = _root_original(ctx, product_id, _get_image(ctx, product_id, image_id))
     if not src.storage_key:
         raise HTTPException(status.HTTP_409_CONFLICT, "Esta imagem só tem URL; importe o arquivo antes de editar.")
     original = ctx.storage.read(ctx.org_id, src.storage_key)
+    src_id, src_name, src_ctype, sku = src.id, src.original_name, src.content_type, p.sku
+    paid = getattr(provider, "paid", False)
+    reserve = st.image_ai_reserve_usd
+    if paid and not ai_budget.reserve(ctx.db, provider.name, st.image_ai_budget_usd, reserve):
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Limite interno de US$ {st.image_ai_budget_usd:.2f} atingido; "
+                                                      "novas edições estão bloqueadas.")
+    safety_id = hashlib.sha256(f"mla:{ctx.org_id}:{ctx.user.id}".encode()).hexdigest()
     try:
-        result = provider.edit(original, src.content_type, body.prompt)
+        result = provider.edit(original, src_ctype, body.prompt, safety_id=safety_id)
     except ImageEditError as exc:
+        charged = ai_budget.settle(ctx.db, provider.name, reserve, exc.charged_usd) if paid else 0
+        audit.record(ctx.db, "image.ai_failed", user_id=ctx.user.id, org_id=ctx.org_id, target_type="product",
+                     target_id=product_id, provider=provider.name, cost_micro_usd=charged, error=str(exc)[:300])
+        ctx.db.commit()
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"O provedor recusou a edição: {exc}")
-    ctype = sniff_image(result)
+    charged = ai_budget.settle(ctx.db, provider.name, reserve, result.cost_usd) if paid else 0
+    ctype = sniff_image(result.data)
     if ctype is None:
+        audit.record(ctx.db, "image.ai_failed", user_id=ctx.user.id, org_id=ctx.org_id, target_type="product",
+                     target_id=product_id, provider=provider.name, cost_micro_usd=charged, error="invalid image")
+        ctx.db.commit()
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "O provedor não devolveu uma imagem válida.")
-    img = _store(ctx, p, result, ctype, source="ia", parent_image_id=src.id, prompt=body.prompt,
-                 provider=provider.name, status="pending", original_name=f"IA de {src.original_name or 'imagem'}"[:255],
-                 official_url="")
+    p = get_product(ctx, product_id)
+    img = _store(ctx, p, result.data, ctype, source="ia", parent_image_id=src_id, prompt=body.prompt,
+                 provider=provider.name, status="pending", original_name=f"IA de {src_name or 'imagem'}"[:255],
+                 official_url="", cost_micro_usd=charged,
+                 ai_usage={"model": result.model, **({"usage": result.usage} if result.usage else {}),
+                           "cost_reported": result.cost_usd is not None})
     audit.record(ctx.db, "image.ai_edited", user_id=ctx.user.id, org_id=ctx.org_id, target_type="product",
-                 target_id=p.id, provider=provider.name, external=provider.external, consent=body.consent)
+                 target_id=p.id, sku=sku, provider=provider.name, model=result.model, external=provider.external,
+                 consent=body.consent, cost_micro_usd=charged)
     ctx.db.commit()
     return _image_out(img)

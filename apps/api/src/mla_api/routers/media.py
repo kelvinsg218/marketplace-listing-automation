@@ -167,6 +167,7 @@ class ImageOut(BaseModel):
     prompt: str = ""
     provider: str = ""
     reviewed_at: UtcDatetime | None = None
+    cost_usd: float = 0.0
     created_at: UtcDatetime
 
 
@@ -177,7 +178,8 @@ def _image_out(i: ProductImage) -> ImageOut:
                     official_url=i.official_url, url_problem=problem.message if problem else None,
                     source=i.source or "upload", external_url=i.external_url or "", status=i.status or "approved",
                     parent_image_id=i.parent_image_id, prompt=i.prompt or "", provider=i.provider or "",
-                    reviewed_at=i.reviewed_at, created_at=i.created_at)
+                    reviewed_at=i.reviewed_at, cost_usd=(i.cost_micro_usd or 0) / 1_000_000,
+                    created_at=i.created_at)
 
 
 def _images(ctx: OrgContext, product_id: uuid.UUID) -> list[ProductImage]:

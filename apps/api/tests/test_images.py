@@ -8,6 +8,7 @@ import pytest
 from helpers import make_png
 
 from mla_api.services import safe_fetch
+from mla_api.services.image_ai import EditResult
 
 URL = "https://http2.mlstatic.com/D_NQ_NP_000000-MLA00000000000_000000-F.jpg"
 
@@ -69,15 +70,16 @@ class FakeProvider:
     """Test double: returns a different valid PNG. External, so consent is required."""
     name = "teste-local"
     external = True
+    paid = False
     max_prompt = 1000
 
     def __init__(self, tmp_path):
         self.png = make_png(tmp_path / "edited.png", 20, 20, (255, 255, 255)).read_bytes()
         self.calls = []
 
-    def edit(self, image, content_type, prompt):
+    def edit(self, image, content_type, prompt, *, safety_id=""):
         self.calls.append(prompt)
-        return self.png
+        return EditResult(self.png)
 
 
 @pytest.fixture

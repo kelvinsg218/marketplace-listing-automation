@@ -34,7 +34,8 @@ def create_app(settings: Settings | None = None, *, mailer: Mailer | None = None
     app.state.sessionmaker = make_sessionmaker(engine)
     app.state.login_limiter = LoginLimiter(settings.login_max_failures, settings.login_window_seconds)
     app.state.storage = LocalStorage(settings.storage_dir)
-    app.state.image_ai = provider_from_settings(settings)
+    setup = provider_from_settings(settings)
+    app.state.image_ai, app.state.image_ai_message = setup.provider, setup.message
     if mailer is None:
         mailer = (DisabledMailer() if settings.environment == "production"
                   else OutboxMailer(settings.storage_dir.parent / "outbox"))

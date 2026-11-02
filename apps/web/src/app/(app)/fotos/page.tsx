@@ -8,8 +8,9 @@ import { useApi } from "@/lib/use-api";
 import { Alert, Badge, Button, Card, cx, EmptyState, Input, PageHeader, Select, Textarea } from "@/components/ui";
 
 interface Item { product_id: string; sku: string; name: string; gtin: string; images: number; approved: number; pending: number; with_gestor_url: number }
-interface Img extends ProductImage { source: string; status: string; parent_image_id: string | null; prompt: string; provider: string; external_url: string; created_at: string }
-interface AiStatus { configured: boolean; provider: string | null; external: boolean | null; message: string | null }
+interface Img extends ProductImage { source: string; status: string; parent_image_id: string | null; prompt: string; provider: string; external_url: string; created_at: string; cost_usd: number }
+interface AiBudget { budget_usd: number; spent_usd: number; reserved_usd: number; remaining_usd: number; calls: number; reserve_usd: number }
+interface AiStatus { configured: boolean; provider: string | null; external: boolean | null; paid: boolean; model: string | null; quality: string | null; budget: AiBudget | null; blocked: boolean; preserve_product: string; message: string | null }
 
 const SOURCE: Record<string, string> = { upload: "Arquivo no MLA", url_externa: "URL externa (baixada)", gestor: "URL do Gestor de fotos", ia: "Versão por IA" };
 const STATUS: Record<string, { label: string; tone: "ok" | "warn" | "danger" }> = { approved: { label: "aprovada", tone: "ok" }, pending: { label: "pendente", tone: "warn" }, rejected: { label: "rejeitada", tone: "danger" } };
@@ -26,7 +27,7 @@ function ProductImages({ orgId, item, onChange }: { orgId: string; item: Item; o
   const { role } = useSession();
   const base = `/orgs/${orgId}/products/${item.product_id}/images`;
   const { data: imgs, reload } = useApi<Img[]>(base);
-  const { data: ai } = useApi<AiStatus>(`/orgs/${orgId}/images/ai/status`);
+  const { data: ai, reload: reloadAi } = useApi<AiStatus>(`/orgs/${orgId}/images/ai/status`);
   const [selected, setSelected] = useState<string | null>(null);
   const [url, setUrl] = useState("");
   const [gestor, setGestor] = useState("");
@@ -62,7 +63,7 @@ function ProductImages({ orgId, item, onChange }: { orgId: string; item: Item; o
             {parent ? (
               <div className="grid grid-cols-2 gap-2">
                 <figure><Thumb base={base} img={parent} className="aspect-square w-full rounded-md border border-line" /><figcaption className="mt-1 text-xs text-muted">Original (preservada)</figcaption></figure>
-                <figure><Thumb base={base} img={current} className="aspect-square w-full rounded-md border border-accent/50" /><figcaption className="mt-1 text-xs text-muted">Editada · “{current.prompt}”</figcaption></figure>
+                <figure><Thumb base={base} img={current} className="aspect-square w-full rounded-md border border-accent/50" /><figcaption className="mt-1 text-xs text-muted">{current.status === "pending" ? "Prévia — só entra no catálogo se aprovada" : "Editada"} · “{current.prompt}”</figcaption></figure>
               </div>
             ) : <Thumb base={base} img={current} className="aspect-[4/3] w-full rounded-md border border-line" />}
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
@@ -113,22 +114,26 @@ function ProductImages({ orgId, item, onChange }: { orgId: string; item: Item; o
 
       <div className="mt-6 border-t border-line pt-5">
         <h3 className="text-sm font-semibold flex items-center gap-2"><Sparkles className="size-4 text-accent" />Estúdio de IA</h3>
-        {ai && !ai.configured ? (
-          <div className="mt-3"><Alert tone="info">{ai.message}</Alert></div>
+        {ai?.budget && (
+          <p className="mt-2 text-xs text-muted">Orçamento interno: US$ {ai.budget.spent_usd.toFixed(4)} usados de US$ {ai.budget.budget_usd.toFixed(2)} · {ai.budget.calls} chamada(s) · reserva por pedido US$ {ai.budget.reserve_usd.toFixed(2)}</p>
+        )}
+        {ai && (!ai.configured || ai.blocked) ? (
+          <div className="mt-3"><Alert tone={ai.blocked ? "danger" : "info"}>{ai.message}</Alert></div>
         ) : ai && (
           <div className="mt-3 flex flex-col gap-2">
-            <p className="text-xs text-faint">Provedor: {ai.provider}{ai.external ? " (externo — a imagem sai do MLA)" : ""}. O resultado vira uma nova versão pendente; a original nunca é alterada.</p>
+            <p className="text-xs text-faint">Provedor: {ai.provider}{ai.model ? ` · ${ai.model} (${ai.quality})` : ""}{ai.external ? " (externo — a imagem sai do MLA)" : ""}{ai.paid ? " · chamada paga" : ""}. Uma imagem por vez, sempre a partir da original. O resultado é uma prévia pendente; a original nunca é alterada.</p>
+            <p className="text-xs text-faint">Regra enviada junto com o pedido: o produto (forma, cores, logos, textos, rótulos, peças) não pode ser alterado; só fundo, luz, sombra e enquadramento.</p>
             <div className="flex flex-wrap gap-1.5">{EXAMPLES.map((ex) => <button key={ex} type="button" onClick={() => setPrompt(ex)} className="rounded-sm border border-line px-2 py-0.5 text-xs text-muted hover:text-fg">{ex}</button>)}</div>
             <Textarea aria-label="Pedido de edição" className="min-h-16" value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Descreva a edição desejada…" />
             {ai.external && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="size-4 accent-[var(--color-accent)]" />Autorizo enviar esta imagem ao provedor externo</label>}
             <div><Button variant="primary" busy={busy} disabled={!write || !current?.has_file || prompt.trim().length < 3 || (!!ai.external && !consent)}
-              onClick={() => run(async () => { const v = await api<Img>(`${base}/${current!.id}/ai-edit`, { method: "POST", body: { prompt, consent } }); setSelected(v.id); }, "Nova versão gerada; revise e aprove ou rejeite.")}>Gerar</Button></div>
+              onClick={() => run(async () => { const v = await api<Img>(`${base}/${current!.id}/ai-edit`, { method: "POST", body: { prompt, consent } }); setSelected(v.id); reloadAi(); }, "Prévia gerada; compare com a original e aprove ou rejeite.").finally(reloadAi)}>Gerar prévia</Button></div>
           </div>
         )}
         {versions.length > 0 && (
           <div className="mt-4"><p className="text-xs font-semibold text-muted mb-2">Histórico de versões</p>
             <ul className="flex flex-col gap-1 text-xs">{versions.map((v) => (
-              <li key={v.id}><button className="hover:text-accent-2" onClick={() => setSelected(v.id)}>{new Date(v.created_at).toLocaleString("pt-BR")} · {v.provider} · “{v.prompt}” · <Badge tone={STATUS[v.status]?.tone}>{STATUS[v.status]?.label}</Badge></button></li>
+              <li key={v.id}><button className="hover:text-accent-2" onClick={() => setSelected(v.id)}>{new Date(v.created_at).toLocaleString("pt-BR")} · {v.provider}{v.cost_usd ? ` · US$ ${v.cost_usd.toFixed(4)}` : ""} · “{v.prompt}” · <Badge tone={STATUS[v.status]?.tone}>{STATUS[v.status]?.label}</Badge></button></li>
             ))}</ul></div>
         )}
       </div>
