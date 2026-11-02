@@ -347,8 +347,42 @@ class BatchExport(Base):
     created_at: Mapped[datetime] = _created()
 
 
-# Tables protected by PostgreSQL row-level security (migrations 0001-0003). New organization-owned tables must be
+class ImportJob(Base):
+    """One catalog import: uploaded file -> analysis -> dry run -> background processing -> report."""
+    __tablename__ = "import_jobs"
+    __table_args__ = (CheckConstraint(
+        "status in ('analyzed','planned','running','done','failed','cancelled')", name="ck_import_status"),)
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = _org_fk()
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    format: Mapped[str] = mapped_column(String(8), nullable=False)
+    sheet: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    status: Mapped[str] = mapped_column(String(10), nullable=False)
+    mapping: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)    # {column header: field key}
+    options: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)    # {update_existing: bool}
+    totals: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)     # rows/created/updated/...
+    report: Mapped[list] = mapped_column(JSON, default=list, nullable=False)     # per-row issues (capped)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = _created()
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ImportProfile(Base):
+    """Saved column mapping ("perfil de importação") reused for files with the same headers."""
+    __tablename__ = "import_profiles"
+    __table_args__ = (UniqueConstraint("organization_id", "name", name="uq_import_profile_name"),)
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = _org_fk()
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    mapping: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = _created()
+
+
+# Tables protected by PostgreSQL row-level security (migrations 0001-0004). New organization-owned tables must be
 # added here AND get a policy in their migration; tests/test_isolation.py checks the list against the metadata.
 TENANT_TABLES = ("products", "audit_events", "product_variants", "product_images", "product_channel_data",
                  "seller_accounts", "marketplace_templates", "template_mappings", "listing_batches",
-                 "listing_batch_items", "listing_rules", "listing_rule_versions", "batch_exports")
+                 "listing_batch_items", "listing_rules", "listing_rule_versions", "batch_exports", "import_jobs",
+                 "import_profiles")

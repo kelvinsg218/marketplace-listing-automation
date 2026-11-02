@@ -168,3 +168,12 @@ first into `apps/api/src/mla_api/importing` and `domain/image_info.py` with its 
 desktop package). Desktop work that was never committed was saved locally (`local-archive/`, git-ignored), not lost.
 Import service, compatibilities, field history and the ML API client are rebuilt on the web when needed (inventory in
 MLA_LEGACY_MIGRATION.md).
+
+**D-031 (2026-11-02) Catalog import = analyze -> dry-run plan -> background chunks.** Built on the migrated parsers
+(desktop D-014 ideas, PostgreSQL-ready). Nothing is written before the plan and an explicit confirmation; existing
+SKUs are updated only with `update_existing` and only with filled, different fields; duplicate SKUs in a file are
+row errors; unknown columns can become custom attributes; external image URLs are kept as such (never as Gestor
+URLs). Formats enabled in the UI: XLSX, CSV, JSON, XML (PDF/ZIP parsers exist but are not wired until tested in
+this flow). Processing uses FastAPI BackgroundTasks in chunks of 200 with cancellation; a durable PostgreSQL job
+queue + separate worker is the next step for multi-instance deployments.
+

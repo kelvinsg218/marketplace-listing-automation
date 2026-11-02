@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Boxes, ChevronLeft, ChevronRight, PackagePlus, Search } from "lucide-react";
+import Link from "next/link";
+import { Boxes, ChevronLeft, ChevronRight, FileUp, PackagePlus, Search } from "lucide-react";
 import { api, ApiError, can, type Product, type ProductPage } from "@/lib/api";
 import { money, STATUS_LABEL } from "@/lib/format";
 import { useSession } from "@/lib/session";
@@ -78,7 +79,7 @@ function Catalog() {
   return (
     <>
       <PageHeader title="Produtos" description="Catálogo mestre da organização, independente de marketplace."
-        actions={can.write(role) && <Button variant="primary" onClick={() => setCreating(true)}><PackagePlus className="size-4" />Novo produto</Button>} />
+        actions={can.write(role) && <><Link href="/importacoes/"><Button><FileUp className="size-4" />Importar produtos</Button></Link><Button variant="primary" onClick={() => setCreating(true)}><PackagePlus className="size-4" />Novo produto</Button></>} />
 
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <div className="relative flex-1">
@@ -98,7 +99,7 @@ function Catalog() {
         ) : data && data.total === 0 ? (
           <EmptyState icon={<Boxes className="size-6" />} title={filtered ? "Nenhum produto encontrado" : "Nenhum produto cadastrado"}
             action={!filtered && can.write(role) && <Button variant="primary" onClick={() => setCreating(true)}>Cadastrar produto</Button>}>
-            {filtered ? "Ajuste a busca ou o filtro de status." : "Comece cadastrando um produto. Importação em massa chega na etapa C."}
+            {filtered ? "Ajuste a busca ou o filtro de status." : "Cadastre um produto ou importe a base da sua empresa em Importações."}
           </EmptyState>
         ) : data && (
           <div className="overflow-x-auto">
